@@ -15,14 +15,14 @@ from RadiShPICR.deposition import (
     compute_number_density_metric_derivative,
     compute_number_density_metric_jacobian,
 )
-from RadiShPICR.relativity.matter_source_terms import (
+from RadiShPICR.relativity.energy_momentum import (
     compute_Sr,
     compute_Srr,
 )
 from RadiShPICR.evolve import advance_one_step, rk4_step
 from RadiShPICR.relativity.geodesic import compute_geodesic_terms
-from RadiShPICR.relativity.states import FieldState
-from RadiShPICR.relativity.utils import build_radial_grid
+from RadiShPICR.relativity.grid import build_radial_grid
+from RadiShPICR.relativity.metric import MetricState
 
 
 def make_species():
@@ -167,7 +167,7 @@ def test_scalar_mass_broadcasts_in_source_terms():
 def test_geodesic_terms_return_evolved_orbit_derivatives():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     species = make_species()
-    fields = FieldState(
+    fields = MetricState(
         rho=jnp.zeros_like(grid.r_full),
         A=jnp.ones_like(grid.r_full),
         lapse=jnp.ones_like(grid.r_full),
@@ -175,6 +175,7 @@ def test_geodesic_terms_return_evolved_orbit_derivatives():
         extrinsic_curvature=jnp.zeros_like(grid.r_full),
         S_r=jnp.zeros_like(grid.r_full),
         S_rr=jnp.zeros_like(grid.r_full),
+        exact_exterior_points=jnp.ones_like(grid.r_full, dtype=bool),
     )
 
     derivatives = compute_geodesic_terms(
@@ -192,7 +193,7 @@ def test_geodesic_terms_return_evolved_orbit_derivatives():
 def test_rk4_step_preserves_constrained_momenta_with_new_species():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     species = make_species()
-    fields = FieldState(
+    fields = MetricState(
         rho=jnp.zeros_like(grid.r_full),
         A=jnp.ones_like(grid.r_full),
         lapse=jnp.ones_like(grid.r_full),
@@ -200,6 +201,7 @@ def test_rk4_step_preserves_constrained_momenta_with_new_species():
         extrinsic_curvature=jnp.zeros_like(grid.r_full),
         S_r=jnp.zeros_like(grid.r_full),
         S_rr=jnp.zeros_like(grid.r_full),
+        exact_exterior_points=jnp.ones_like(grid.r_full, dtype=bool),
     )
 
     rk4_particles = rk4_step(species, fields, grid, dt=0.01, schwarzschild_mass=0.0)

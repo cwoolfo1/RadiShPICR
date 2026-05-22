@@ -10,10 +10,12 @@ from RadiShPICR.deposition import (
     compute_number_density_metric_jacobian,
     last_shape_support_index,
 )
-from RadiShPICR.relativity.schwarzschild import schwarzschild_u
+from RadiShPICR.relativity.schwarzschild import schwarzschild_A, schwarzschild_u
 from RadiShPICR.relativity.utils import (
     centered_first_derivative,
     centered_second_derivative,
+    compute_metric_radial_derivative,
+    safe_metric_A,
     safe_radius,
 )
 
@@ -328,3 +330,29 @@ def solve_metric_A(
     U_final = jnp.where(exact_exterior_points, boundary_u, U_final)
 
     return U_final**2, converged, residual_norm_inf
+
+
+@jax.jit
+def euler_step_A(metric, grid, dt, schwarzschild_mass):
+    """Predict the next ``A`` field with one explicit Euler step."""
+
+    safe_r = safe_radius(grid.r_full, grid.epsilon)
+    dA_dr = compute_metric_radial_derivative(metric.A, schwarzschild_mass, grid)
+
+    # The polar-gauge evolution equation advects A with the shift:
+    # d_t A = beta * (d_r A + A / r).
+    dt_value = jnp.asarray(dt, dtype=metric.A.dtype)
+    metric_rhs = metric.shift * (dA_dr + metric.A / safe_r)
+    A_new = metric.A + dt_value * metric_rhs
+
+    # Keep A positive before it is used in density reconstruction.
+    A_new = safe_metric_A(A_new)
+
+    # The outer boundary is vacuum and is pinned to the exact Schwarzschild A.
+    outer_A = schwarzschild_A(grid.r_full[-1], schwarzschild_mass, grid.epsilon)
+    A_new = A_new.at[-1].set(outer_A)
+
+    # The center is regular, so keep its predictor fixed instead of introducing
+    # a one-sided drift that would fight the Neumann condition.
+    A_new = A_new.at[0].set(metric.A[0])
+    return A_new

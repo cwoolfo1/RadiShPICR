@@ -1,8 +1,6 @@
 import jax
 import jax.numpy as jnp
 
-from RadiShPICR.relativity.states import RadialGrid
-
 
 @jax.jit
 def safe_radius(radius, epsilon):
@@ -54,18 +52,6 @@ def centered_second_derivative(field, dr):
 
 
 @jax.jit
-def schwarzschild_dA_dr(radius, schwarzschild_mass, epsilon):
-    """Outer-boundary Schwarzschild derivative for A.
-
-    This uses the boundary formula requested by the user:
-    dA/dr = 2 * (1 + M / (2 r)) * (-M / (2 r^2)).
-    """
-
-    safe_r = safe_radius(radius, epsilon)
-    mass_value = jnp.asarray(schwarzschild_mass, dtype=safe_r.dtype)
-    return 2.0 * (1.0 + mass_value / (2.0 * safe_r)) * (-mass_value / (2.0 * safe_r**2))
-
-@jax.jit
 def compute_metric_radial_derivative(
     A,
     schwarzschild_mass,
@@ -73,6 +59,8 @@ def compute_metric_radial_derivative(
     exact_exterior_points = None,
 ):
     """Compute ``dA/dr`` with the regular-center and exterior Schwarzschild BCs."""
+
+    from RadiShPICR.relativity.schwarzschild import schwarzschild_dA_dr
 
     dA_dr = centered_first_derivative(A, grid.dr)
     # start with a centered finite difference
@@ -166,48 +154,3 @@ def nearest_interior_index(radial_positions, grid):
     nearest = jnp.rint(floating_index).astype(jnp.int32)
     return jnp.clip(nearest, 1, grid.r_full.shape[0] - 2)
 
-
-def build_radial_grid(epsilon: float, r_max: float, num_interior_points: int) -> RadialGrid:
-    """Build the physical radial grid used by every field solve.
-
-    The grid now includes the regular center ``r = 0`` explicitly.
-    The ``epsilon`` argument is retained only as a positive radius floor used
-    in particle denominators and exterior Schwarzschild helpers.
-    """
-
-    if num_interior_points < 2:
-        raise ValueError("num_interior_points must be at least 2")
-
-    epsilon_value = float(epsilon)
-    # keep the caller supplied epsilon as the radius floor before we decide whether the regular center needs a default floor
-    r_max_value = float(r_max)
-    # convert the outer boundary location to a plain float before building the uniform grid
-
-    if not (epsilon_value >= 0.0):
-        raise ValueError(
-            "epsilon must be nonnegative: it is now used only as the "
-            "positive radius floor for particle denominators."
-        )
-    # the regular center allows epsilon = 0, but the radius floor cannot be negative
-    if not (r_max_value > 0.0):
-        raise ValueError("r_max must be strictly positive")
-    # the physical grid must extend outward from the regular center
-    if not (r_max_value > epsilon_value):
-        raise ValueError("r_max must be strictly greater than epsilon")
-    # keep the positive radius floor smaller than the physical outer boundary
-
-    dr_value = r_max_value / float(num_interior_points - 1)
-    # use the full interval from the regular center to the outer boundary for the physical grid
-    r_physical = jnp.linspace(0.0, r_max_value, int(num_interior_points))
-    # place the first physical grid point exactly at the regular center r = 0
-    if epsilon_value == 0.0:
-        epsilon_value = 0.5 * dr_value
-        # keep a strictly positive radius floor for particle denominators even though the grid now includes r = 0
-
-    return RadialGrid(
-        r_full=r_physical,
-        r_interior=r_physical,
-        dr=dr_value,
-        epsilon=epsilon_value,
-        r_max=r_max_value,
-    )

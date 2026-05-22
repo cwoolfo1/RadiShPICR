@@ -46,33 +46,33 @@ def interpolate_to_particle(field, radial_positions, grid, shape_mode="nearest")
 @partial(jax.jit, static_argnames=("shape_mode",))
 def compute_geodesic_terms(
     particles,
-    fields,
+    metric,
     grid,
     schwarzschild_mass,
     shape_mode="nearest",
 ):
-    A_at_particle = interpolate_to_particle(fields.A, particles.r, grid, shape_mode=shape_mode)
+    A_at_particle = interpolate_to_particle(metric.A, particles.r, grid, shape_mode=shape_mode)
     lapse_at_particle = interpolate_to_particle(
-        fields.lapse,
+        metric.lapse,
         particles.r,
         grid,
         shape_mode=shape_mode,
     )
     shift_at_particle = interpolate_to_particle(
-        fields.shift,
+        metric.shift,
         particles.r,
         grid,
         shape_mode=shape_mode,
     )
 
     dA_dr = compute_metric_radial_derivative(
-        fields.A,
+        metric.A,
         schwarzschild_mass,
         grid,
         exact_exterior_points=None,
     )
-    d_lapse_dr = centered_first_derivative(fields.lapse, grid.dr)
-    d_shift_dr = centered_first_derivative(fields.shift, grid.dr)
+    d_lapse_dr = centered_first_derivative(metric.lapse, grid.dr)
+    d_shift_dr = centered_first_derivative(metric.shift, grid.dr)
     dA_dr_at_particle = interpolate_to_particle(
         dA_dr,
         particles.r,
@@ -93,12 +93,16 @@ def compute_geodesic_terms(
     )
 
     safe_r_particle = safe_radius(particles.r, grid.epsilon)
+    # W is the normal-observer Lorentz factor for 1D radial motion plus the
+    # conserved azimuthal momentum in the spherical spatial metric.
     W = jnp.sqrt(
         1.0
         + particles.u_r**2 / A_at_particle**2
         + particles.u_phi**2 / (safe_r_particle**2 * A_at_particle**2)
     )
 
+    # The coordinate radial velocity is the lapse-scaled physical radial
+    # momentum minus the shift advection.
     dr_dt = lapse_at_particle * particles.u_r / (A_at_particle**2 * W) - shift_at_particle
     dphi_dt = compute_dphi_dt(
         lapse_at_particle,
@@ -108,6 +112,8 @@ def compute_geodesic_terms(
         W,
     )
 
+    # The radial geodesic equation contains lapse force, shift-gradient
+    # advection, radial metric-gradient force, and centrifugal curvature force.
     du_r_dt = -W * d_lapse_dr_at_particle + particles.u_r * d_shift_dr_at_particle
     du_r_dt = du_r_dt + (
         lapse_at_particle * particles.u_r**2 * dA_dr_at_particle / (A_at_particle**3 * W)

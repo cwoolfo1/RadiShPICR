@@ -3,8 +3,9 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from RadiShPICR.relativity.evolve import Euler_Step_A, compute_fields
+from RadiShPICR.relativity.A import euler_step_A
 from RadiShPICR.relativity.geodesic import compute_geodesic_terms
+from RadiShPICR.relativity.metric import compute_metric
 
 
 @partial(jax.jit, static_argnames=("shape_mode",))
@@ -91,17 +92,16 @@ def advance_one_step(
         if previous_fields is None:
             prepared_initial_A_guess = initial_A_guess
         else:
-            prepared_initial_A_guess = Euler_Step_A(
+            prepared_initial_A_guess = euler_step_A(
                 previous_fields,
                 grid,
                 dt,
                 current_mass,
             )
-        fields = compute_fields(
+        fields = compute_metric(
             particles,
             grid,
             schwarzschild_mass,
-            dt=dt,
             initial_A_guess=prepared_initial_A_guess,
             shape_mode=shape_mode,
         )
