@@ -16,14 +16,7 @@ def _check_shape_mode(shape_mode):
 
 @partial(jax.jit, static_argnames=("shape_mode",))
 def radial_shape_stencil(radial_positions, grid, shape_mode="nearest"):
-    """Return radial deposition/interpolation indices and weights.
-
-    ``nearest`` preserves the existing single-cell source deposition rule.
-    ``quadratic`` uses the second-order three-point particle shape from the
-    PyPIC3D reference, restricted to the interior source cells. When the
-    quadratic support reaches a boundary, the surviving interior weights are
-    renormalized so every particle keeps its total contribution.
-    """
+    """Return radial deposition/interpolation indices and weights."""
 
     _check_shape_mode(shape_mode)
 

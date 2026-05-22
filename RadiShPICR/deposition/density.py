@@ -3,7 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from RadiShPICR.relativity.particle_shapes import radial_shape_stencil
+from RadiShPICR.deposition.particle_shapes import radial_shape_stencil
 from RadiShPICR.relativity.utils import safe_metric_A, safe_radius
 
 
@@ -16,7 +16,7 @@ def _effective_charge(particles):
 
 
 def interpolate_to_particle(field, radial_positions, grid, shape_mode="nearest"):
-    from RadiShPICR.relativity.particle_shapes import interpolate_field_to_particles
+    from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
 
     return interpolate_field_to_particles(
         field,

@@ -3,7 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from RadiShPICR.relativity.particle_shapes import (
+from RadiShPICR.deposition.particle_shapes import (
     interpolate_field_to_particles,
     radial_shape_stencil,
 )

@@ -8,8 +8,8 @@ from RadiShPICR.deposition import (
     compute_number_density,
     compute_number_density_metric_derivative,
     compute_number_density_metric_jacobian,
+    last_shape_support_index,
 )
-from RadiShPICR.relativity.particle_shapes import last_shape_support_index
 from RadiShPICR.relativity.schwarzschild import schwarzschild_u
 from RadiShPICR.relativity.utils import (
     centered_first_derivative,

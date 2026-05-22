@@ -1,3 +1,5 @@
+import inspect
+
 import jax
 import jax.numpy as jnp
 
@@ -17,7 +19,8 @@ from RadiShPICR.relativity.matter_source_terms import (
     compute_Sr,
     compute_Srr,
 )
-from RadiShPICR.relativity.evolve import euler_step, rk4_step
+from RadiShPICR.evolve import advance_one_step, rk4_step
+from RadiShPICR.relativity.geodesic import compute_geodesic_terms
 from RadiShPICR.relativity.states import FieldState
 from RadiShPICR.relativity.utils import build_radial_grid
 
@@ -161,7 +164,7 @@ def test_scalar_mass_broadcasts_in_source_terms():
         assert Srr_from_species.shape == grid.r_full.shape
 
 
-def test_relativity_steps_preserve_constrained_momenta_with_new_species():
+def test_geodesic_terms_return_evolved_orbit_derivatives():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     species = make_species()
     fields = FieldState(
@@ -174,8 +177,35 @@ def test_relativity_steps_preserve_constrained_momenta_with_new_species():
         S_rr=jnp.zeros_like(grid.r_full),
     )
 
-    euler_particles = euler_step(species, fields, grid, dt=0.01, schwarzschild_mass=0.0)
+    derivatives = compute_geodesic_terms(
+        species,
+        fields,
+        grid,
+        schwarzschild_mass=0.0,
+    )
+
+    assert derivatives.dr_dt.shape == species.r.shape
+    assert derivatives.dphi_dt.shape == species.r.shape
+    assert derivatives.du_r_dt.shape == species.r.shape
+
+
+def test_rk4_step_preserves_constrained_momenta_with_new_species():
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = make_species()
+    fields = FieldState(
+        rho=jnp.zeros_like(grid.r_full),
+        A=jnp.ones_like(grid.r_full),
+        lapse=jnp.ones_like(grid.r_full),
+        shift=jnp.zeros_like(grid.r_full),
+        extrinsic_curvature=jnp.zeros_like(grid.r_full),
+        S_r=jnp.zeros_like(grid.r_full),
+        S_rr=jnp.zeros_like(grid.r_full),
+    )
+
     rk4_particles = rk4_step(species, fields, grid, dt=0.01, schwarzschild_mass=0.0)
 
-    assert jnp.allclose(euler_particles.u_phi, species.u_phi)
     assert jnp.allclose(rk4_particles.u_phi, species.u_phi)
+
+
+def test_advance_one_step_is_rk4_only_api():
+    assert "integrator" not in inspect.signature(advance_one_step).parameters
