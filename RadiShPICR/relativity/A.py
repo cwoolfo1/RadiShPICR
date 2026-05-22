@@ -3,14 +3,19 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from src.utils import centered_first_derivative, centered_second_derivative, safe_radius
-from src.schwarzschild import schwarzschild_u
-from src.matter_source_terms import (
+from RadiShPICR.deposition import (
     compute_mass_density,
-    compute_mass_density_metric_derivative,
-    compute_mass_density_metric_jacobian,
+    compute_number_density,
+    compute_number_density_metric_derivative,
+    compute_number_density_metric_jacobian,
 )
-from src.particle_shapes import last_shape_support_index
+from RadiShPICR.relativity.particle_shapes import last_shape_support_index
+from RadiShPICR.relativity.schwarzschild import schwarzschild_u
+from RadiShPICR.relativity.utils import (
+    centered_first_derivative,
+    centered_second_derivative,
+    safe_radius,
+)
 
 
 def nonlinear_residual_u( U, source_term, grid, boundary_u, exact_exterior_points ):
@@ -91,19 +96,23 @@ def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
     """Build the matter source terms needed by the coupled Newton solve."""
 
     A = U**2
-    rho = compute_mass_density(particles, A, grid, shape_mode=shape_mode)
-    drho_dA = compute_mass_density_metric_derivative(
+    number_density = compute_number_density(particles, A, grid, shape_mode=shape_mode)
+    dn_dA = compute_number_density_metric_derivative(
         particles,
         A,
         grid,
         shape_mode=shape_mode,
     )
-    drho_dA_jacobian = compute_mass_density_metric_jacobian(
+    dn_dA_jacobian = compute_number_density_metric_jacobian(
         particles,
         A,
         grid,
         shape_mode=shape_mode,
     )
+    particle_mass = particles.get_mass()
+    rho = particle_mass * number_density
+    drho_dA = particle_mass * dn_dA
+    drho_dA_jacobian = particle_mass * dn_dA_jacobian
     source_term = -2.0 * jnp.pi * rho
     source_term_U_derivative = -4.0 * jnp.pi * U * drho_dA
     source_term_U_jacobian = -4.0 * jnp.pi * drho_dA_jacobian * U[jnp.newaxis, :]

@@ -1,1 +1,1 @@
-"""Spherically symmetric relativity code in the refactored `src` package."""
+"""Spherically symmetric relativity code for RadiShPICR."""

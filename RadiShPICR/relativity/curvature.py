@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from src.utils import safe_radius, compute_metric_radial_derivative
+from RadiShPICR.relativity.utils import safe_radius, compute_metric_radial_derivative
 
 
 @jax.jit

@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from src.states import RadialGrid
+from RadiShPICR.relativity.states import RadialGrid
 
 
 @jax.jit

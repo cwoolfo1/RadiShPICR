@@ -3,17 +3,20 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from src.curvature import compute_extrinsic_curvature
-from src.states import FieldState
-from src.schwarzschild import schwarzschild_A
-from src.utils import safe_radius, safe_metric_A, compute_metric_radial_derivative
-from src.A import solve_metric_A
-from src.matter_source_terms import compute_mass_density, compute_Sr, compute_Srr
-from src.particle_shapes import last_shape_support_index
-from src.particles import compute_particle_derivatives
-from src.shift_and_lapse import compute_lapse, compute_shift
-from src.utils import (
+from RadiShPICR.deposition import compute_mass_density
+from RadiShPICR.relativity.A import solve_metric_A
+from RadiShPICR.relativity.curvature import compute_extrinsic_curvature
+from RadiShPICR.relativity.matter_source_terms import compute_Sr, compute_Srr
+from RadiShPICR.relativity.particle_shapes import last_shape_support_index
+from RadiShPICR.relativity.particles import compute_particle_derivatives
+from RadiShPICR.relativity.schwarzschild import schwarzschild_A
+from RadiShPICR.relativity.shift_and_lapse import compute_lapse, compute_shift
+from RadiShPICR.relativity.states import FieldState
+from RadiShPICR.relativity.utils import (
+    compute_metric_radial_derivative,
     exact_exterior_points_from_last_matter_index,
+    safe_metric_A,
+    safe_radius,
 )
 
 
@@ -63,23 +66,8 @@ def compute_fields(
 
 
     rho = compute_mass_density(particles, A, grid, shape_mode=shape_mode)
-    S_r = compute_Sr(
-        particles.mass,
-        particles.u_r,
-        particles.r,
-        A,
-        grid,
-        shape_mode=shape_mode,
-    )
-    S_rr = compute_Srr(
-        particles.mass,
-        particles.u_r,
-        particles.u_phi,
-        particles.r,
-        A,
-        grid,
-        shape_mode=shape_mode,
-    )
+    S_r = compute_Sr(particles, A, grid, shape_mode=shape_mode)
+    S_rr = compute_Srr(particles, A, grid, shape_mode=shape_mode)
     # compute the matter source terms from the particle properties and the metric field A
 
     rho = jnp.where(exact_exterior_points, 0.0, rho)

@@ -2,10 +2,20 @@ import jax
 import jax.numpy as jnp
 
 from RadiShPICR.particles.particle_species import particle_species
+from RadiShPICR.deposition import (
+    compute_charge_density,
+    compute_charge_density_metric_derivative,
+    compute_charge_density_metric_jacobian,
+    compute_mass_density,
+    compute_mass_density_metric_derivative,
+    compute_mass_density_metric_jacobian,
+    compute_number_density,
+    compute_number_density_metric_derivative,
+    compute_number_density_metric_jacobian,
+)
 from RadiShPICR.relativity.matter_source_terms import (
     compute_Sr,
     compute_Srr,
-    compute_density_and_metric_derivative,
 )
 from RadiShPICR.relativity.evolve import euler_step, rk4_step
 from RadiShPICR.relativity.states import FieldState
@@ -45,13 +55,12 @@ def test_species_stores_spherical_state_and_scalar_metadata():
     assert species.get_charge() == 6.0
     assert species.get_temperature() == 0.5
     r, phi = species.get_position()
-    u_r, u_theta, u_phi = species.get_velocity()
+    u_r, u_phi = species.get_velocity()
     assert jnp.allclose(r, species.r)
     assert jnp.allclose(phi, species.phi)
     assert jnp.allclose(u_r, species.u_r)
-    assert jnp.allclose(u_theta, species.u_theta)
     assert jnp.allclose(u_phi, species.u_phi)
-    assert jnp.all(species.u_theta == 0.0)
+    assert not hasattr(species, "u" + "_theta")
 
 
 def test_orbital_update_only_replaces_r_phi_and_u_r():
@@ -67,7 +76,6 @@ def test_orbital_update_only_replaces_r_phi_and_u_r():
     assert jnp.allclose(updated.r, jnp.array([0.3, 0.6, 0.9]))
     assert jnp.allclose(updated.phi, jnp.array([1.0, 1.1, 1.2]))
     assert jnp.allclose(updated.u_r, jnp.array([0.2, 0.3, 0.4]))
-    assert jnp.allclose(updated.u_theta, species.u_theta)
     assert jnp.allclose(updated.u_phi, species.u_phi)
 
 
@@ -112,8 +120,32 @@ def test_species_is_jax_pytree():
     assert jnp.allclose(rebuilt.r, species.r)
     assert jnp.allclose(rebuilt.phi, species.phi)
     assert jnp.allclose(rebuilt.u_r, species.u_r)
-    assert jnp.allclose(rebuilt.u_theta, species.u_theta)
     assert jnp.allclose(rebuilt.u_phi, species.u_phi)
+
+
+def test_density_helpers_scale_number_density_by_scalar_metadata():
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = make_species()
+    A = jnp.ones_like(grid.r_full)
+
+    for shape_mode in ("nearest", "quadratic"):
+        number_density = compute_number_density(species, A, grid, shape_mode=shape_mode)
+        mass_density = compute_mass_density(species, A, grid, shape_mode=shape_mode)
+        charge_density = compute_charge_density(species, A, grid, shape_mode=shape_mode)
+        dn_dA = compute_number_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
+        drho_dA = compute_mass_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
+        dq_dA = compute_charge_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
+        number_jacobian = compute_number_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
+        mass_jacobian = compute_mass_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
+        charge_jacobian = compute_charge_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
+
+        assert number_density.shape == grid.r_full.shape
+        assert jnp.allclose(mass_density, species.get_mass() * number_density)
+        assert jnp.allclose(charge_density, species.get_charge() * number_density)
+        assert jnp.allclose(drho_dA, species.get_mass() * dn_dA)
+        assert jnp.allclose(dq_dA, species.get_charge() * dn_dA)
+        assert jnp.allclose(mass_jacobian, species.get_mass() * number_jacobian)
+        assert jnp.allclose(charge_jacobian, species.get_charge() * number_jacobian)
 
 
 def test_scalar_mass_broadcasts_in_source_terms():
@@ -121,17 +153,12 @@ def test_scalar_mass_broadcasts_in_source_terms():
     species = make_species()
     A = jnp.ones_like(grid.r_full)
 
-    rho, _ = compute_density_and_metric_derivative(species, A, grid)
-    Sr_from_species = compute_Sr(species, A, grid)
-    Srr_from_species = compute_Srr(species, A, grid)
+    for shape_mode in ("nearest", "quadratic"):
+        Sr_from_species = compute_Sr(species, A, grid, shape_mode=shape_mode)
+        Srr_from_species = compute_Srr(species, A, grid, shape_mode=shape_mode)
 
-    expected_masses = jnp.full(species.r.shape, species.get_mass())
-    expected_Sr = compute_Sr(expected_masses, species.u_r, species.r, A, grid)
-    expected_Srr = compute_Srr(expected_masses, species.u_r, species.u_phi, species.r, A, grid)
-
-    assert rho.shape == grid.r_full.shape
-    assert jnp.allclose(Sr_from_species, expected_Sr)
-    assert jnp.allclose(Srr_from_species, expected_Srr)
+        assert Sr_from_species.shape == grid.r_full.shape
+        assert Srr_from_species.shape == grid.r_full.shape
 
 
 def test_relativity_steps_preserve_constrained_momenta_with_new_species():
@@ -150,7 +177,5 @@ def test_relativity_steps_preserve_constrained_momenta_with_new_species():
     euler_particles = euler_step(species, fields, grid, dt=0.01, schwarzschild_mass=0.0)
     rk4_particles = rk4_step(species, fields, grid, dt=0.01, schwarzschild_mass=0.0)
 
-    assert jnp.allclose(euler_particles.u_theta, species.u_theta)
     assert jnp.allclose(euler_particles.u_phi, species.u_phi)
-    assert jnp.allclose(rk4_particles.u_theta, species.u_theta)
     assert jnp.allclose(rk4_particles.u_phi, species.u_phi)

@@ -1,8 +1,13 @@
 import jax
 import jax.numpy as jnp
 
-from src.utils import safe_radius, compute_metric_radial_derivative, reverse_cumulative_hermite, reverse_cumulative_trapezoid
-from src.schwarzschild import schwarzschild_A, schwarzschild_lapse
+from RadiShPICR.relativity.schwarzschild import schwarzschild_A, schwarzschild_lapse
+from RadiShPICR.relativity.utils import (
+    compute_metric_radial_derivative,
+    reverse_cumulative_hermite,
+    reverse_cumulative_trapezoid,
+    safe_radius,
+)
 
 @jax.jit
 def compute_polar_lapse_denominator(

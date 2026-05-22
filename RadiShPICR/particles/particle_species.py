@@ -6,9 +6,8 @@ from jax.tree_util import register_pytree_node_class
 class particle_species:
     """Spherical 1D2V particle species stored as a JAX pytree.
 
-    The evolved orbit variables are ``r``, ``phi``, and ``u_r``.  The first
-    implementation preserves the spherical reduction by keeping ``u_theta`` at
-    zero and carrying ``u_phi`` as a conserved particle label.
+    The evolved orbit variables are ``r``, ``phi``, and ``u_r``.  The
+    azimuthal momentum ``u_phi`` is carried as a conserved particle label.
     """
 
     def __init__(
@@ -22,7 +21,6 @@ class particle_species:
         phi,
         u_r,
         u_phi,
-        u_theta=None,
         weight=1.0,
         r_min=0.0,
         r_max=None,
@@ -48,10 +46,6 @@ class particle_species:
         self.phi = jnp.asarray(phi, dtype=self.r.dtype)
         self.u_r = jnp.asarray(u_r, dtype=self.r.dtype)
         self.u_phi = jnp.asarray(u_phi, dtype=self.r.dtype)
-        if u_theta is None:
-            self.u_theta = jnp.zeros_like(self.r)
-        else:
-            self.u_theta = jnp.asarray(u_theta, dtype=self.r.dtype)
 
         self._validate_array_shapes()
 
@@ -105,7 +99,7 @@ class particle_species:
 
     def _validate_array_shapes(self):
         expected_shape = self.r.shape
-        for field_name in ("phi", "u_r", "u_theta", "u_phi"):
+        for field_name in ("phi", "u_r", "u_phi"):
             field_value = getattr(self, field_name)
             if field_value.shape != expected_shape:
                 raise ValueError(
@@ -151,7 +145,7 @@ class particle_species:
         return self.get_position()
 
     def get_velocity(self):
-        return self.u_r, self.u_theta, self.u_phi
+        return self.u_r, self.u_phi
 
     def get_index(self):
         """Return nearest interior radial deposition indices.
@@ -174,9 +168,8 @@ class particle_species:
         self.phi = jnp.asarray(phi, dtype=self.r.dtype)
         self._validate_array_shapes()
 
-    def set_velocity(self, u_r, u_theta, u_phi):
+    def set_velocity(self, u_r, u_phi):
         self.u_r = jnp.asarray(u_r, dtype=self.r.dtype)
-        self.u_theta = jnp.asarray(u_theta, dtype=self.r.dtype)
         self.u_phi = jnp.asarray(u_phi, dtype=self.r.dtype)
         self._validate_array_shapes()
 
@@ -202,8 +195,8 @@ class particle_species:
     ):
         """Replace the evolved 1D2V orbit variables.
 
-        ``u_theta`` and ``u_phi`` are intentionally preserved by this first
-        spherical implementation.
+        ``u_phi`` is intentionally preserved by this first spherical
+        implementation.
         """
 
         return self._replace(
@@ -228,7 +221,6 @@ class particle_species:
             "r": self.r,
             "phi": self.phi,
             "u_r": self.u_r,
-            "u_theta": self.u_theta,
             "u_phi": self.u_phi,
         }
         values.update(updates)
@@ -242,7 +234,6 @@ class particle_species:
             r=values["r"],
             phi=values["phi"],
             u_r=values["u_r"],
-            u_theta=values["u_theta"],
             u_phi=values["u_phi"],
             weight=self.weight,
             r_min=self.r_min,
@@ -253,7 +244,7 @@ class particle_species:
         )
 
     def tree_flatten(self):
-        children = (self.r, self.phi, self.u_r, self.u_theta, self.u_phi)
+        children = (self.r, self.phi, self.u_r, self.u_phi)
         aux_data = (
             self.name,
             self.number_of_particles,
@@ -271,7 +262,7 @@ class particle_species:
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):
-        r, phi, u_r, u_theta, u_phi = children
+        r, phi, u_r, u_phi = children
         (
             name,
             number_of_particles,
@@ -295,7 +286,6 @@ class particle_species:
             r=r,
             phi=phi,
             u_r=u_r,
-            u_theta=u_theta,
             u_phi=u_phi,
             weight=weight,
             r_min=r_min,

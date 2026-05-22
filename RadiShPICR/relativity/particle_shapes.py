@@ -3,7 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from src.utils import nearest_interior_index
+from RadiShPICR.relativity.utils import nearest_interior_index
 
 
 def _check_shape_mode(shape_mode):

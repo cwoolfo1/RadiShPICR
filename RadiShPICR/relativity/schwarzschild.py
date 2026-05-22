@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 
-from src.utils import safe_radius
-from src.states import FieldState
+from RadiShPICR.relativity.states import FieldState
+from RadiShPICR.relativity.utils import safe_radius
 
 
 def schwarzschild_u(radius, schwarzschild_mass, epsilon):
