@@ -1,4 +1,4 @@
-## Solver Logic For Poisson Equation ##
+## Solver Logic For Radial Gauss Law ##
 
 
 $$
@@ -7,7 +7,7 @@ $$
 
 $$
 
-That is the relativistic Poisson equation in the curved spacetime for a spherically symmetric relativistic system.
+That is radial Gauss law in the curved spacetime for a spherically symmetric relativistic system.
 
 We will use a finite difference discretization of the r derivative to formulate this equation as a matrix inversion
 problem. We will use a uniform grid in r, with grid points $r_i = i \Delta r$ for $i = 0, 1, ..., N-1$, where $\Delta r$ is the grid spacing. The center is fixed by spherical symmetry, and the outer point is solved with a backward finite-difference row.

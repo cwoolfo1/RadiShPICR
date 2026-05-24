@@ -25,11 +25,6 @@ from RadiShPICR.relativity.grid import build_radial_grid
 from RadiShPICR.relativity.metric import MetricState
 
 
-class FakeElectricSolveResult:
-    def __init__(self, electric_field):
-        self.electric_field = electric_field
-
-
 def make_species():
     return particle_species(
         name="ions",
@@ -245,11 +240,16 @@ def test_rk4_step_recomputes_electric_field_for_each_stage(monkeypatch):
     )
     calls = []
 
-    def fake_solve(stage_particles, A, solve_grid, shape_mode="nearest"):
+    def fake_solve(particle_list, A, solve_grid, shape_mode="nearest"):
+        stage_particles = particle_list[0]
         calls.append(jnp.asarray(stage_particles.u_r))
-        return FakeElectricSolveResult(jnp.ones_like(solve_grid.r_full))
+        return jnp.zeros_like(solve_grid.r_full), jnp.ones_like(solve_grid.r_full)
 
-    monkeypatch.setattr(evolve, "solve_radial_electric_field", fake_solve)
+    monkeypatch.setattr(
+        evolve,
+        "compute_charge_density_and_radial_electric_field",
+        fake_solve,
+    )
 
     updated = rk4_step(
         species,

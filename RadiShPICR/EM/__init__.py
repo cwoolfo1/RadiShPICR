@@ -1,8 +1,7 @@
-from .radial_poisson import (
-    RadialElectricFieldSolveResult,
-    build_radial_poisson_operator,
-    solve_radial_electric_field,
-    solve_radial_electric_field_from_charge_density,
+from .gauss_law import (
+    build_radial_gauss_law_operator,
+    compute_charge_density_and_radial_electric_field,
+    compute_radial_electric_field,
 )
 from .lorentz_force import (
     LorentzForceTerms,
@@ -11,9 +10,8 @@ from .lorentz_force import (
 
 __all__ = [
     "LorentzForceTerms",
-    "RadialElectricFieldSolveResult",
-    "build_radial_poisson_operator",
+    "build_radial_gauss_law_operator",
+    "compute_charge_density_and_radial_electric_field",
+    "compute_radial_electric_field",
     "compute_radial_lorentz_force_terms",
-    "solve_radial_electric_field",
-    "solve_radial_electric_field_from_charge_density",
 ]

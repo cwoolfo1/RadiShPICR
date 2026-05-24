@@ -59,7 +59,7 @@ def build_dense_operator( radial_grid, dr, jacobian_diagonal, exact_exterior_poi
     - Interior rows: second-order centered FD stencil plus ``jacobian_diagonal``
     - Vacuum exterior rows: Dirichlet ``U = 1 + M / (2 r)``
 
-    For the linear Poisson pre-solve pass ``jacobian_diagonal = zeros``.
+    For the linear elliptic pre-solve pass ``jacobian_diagonal = zeros``.
     For the Newton Jacobian pass this function receives only the local
     ``-5 * source_term * U^4`` diagonal. Any off-diagonal matter-source
     derivative from shaped deposition is added explicitly by ``solve_metric_A``.

@@ -1,6 +1,9 @@
 import jax.numpy as jnp
 
-from RadiShPICR.EM import compute_radial_lorentz_force_terms, solve_radial_electric_field
+from RadiShPICR.EM import (
+    compute_charge_density_and_radial_electric_field,
+    compute_radial_lorentz_force_terms,
+)
 from RadiShPICR.relativity.A import euler_step_A
 from RadiShPICR.relativity.geodesic import compute_geodesic_terms
 from RadiShPICR.relativity.metric import compute_metric
@@ -20,8 +23,8 @@ def _compute_particle_derivatives(
         schwarzschild_mass,
         shape_mode=shape_mode,
     )
-    electric_solve = solve_radial_electric_field(
-        particles,
+    _, electric_field = compute_charge_density_and_radial_electric_field(
+        [particles],
         fields.A,
         grid,
         shape_mode=shape_mode,
@@ -30,7 +33,7 @@ def _compute_particle_derivatives(
         particles,
         fields,
         grid,
-        electric_solve.electric_field,
+        electric_field,
         shape_mode=shape_mode,
     )
 
