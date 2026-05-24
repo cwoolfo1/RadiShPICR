@@ -6,8 +6,6 @@ import jax.numpy as jnp
 from RadiShPICR.particles.particle_species import particle_species
 from RadiShPICR.deposition import (
     compute_charge_density,
-    compute_charge_density_metric_derivative,
-    compute_charge_density_metric_jacobian,
     compute_mass_density,
     compute_mass_density_metric_derivative,
     compute_mass_density_metric_jacobian,
@@ -126,7 +124,7 @@ def test_species_is_jax_pytree():
     assert jnp.allclose(rebuilt.u_phi, species.u_phi)
 
 
-def test_density_helpers_scale_number_density_by_scalar_metadata():
+def test_mass_energy_density_helpers_scale_number_density_by_scalar_metadata():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     species = make_species()
     A = jnp.ones_like(grid.r_full)
@@ -134,21 +132,63 @@ def test_density_helpers_scale_number_density_by_scalar_metadata():
     for shape_mode in ("nearest", "quadratic"):
         number_density = compute_number_density(species, A, grid, shape_mode=shape_mode)
         mass_density = compute_mass_density(species, A, grid, shape_mode=shape_mode)
-        charge_density = compute_charge_density(species, A, grid, shape_mode=shape_mode)
         dn_dA = compute_number_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
         drho_dA = compute_mass_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
-        dq_dA = compute_charge_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
         number_jacobian = compute_number_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
         mass_jacobian = compute_mass_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
-        charge_jacobian = compute_charge_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
 
         assert number_density.shape == grid.r_full.shape
         assert jnp.allclose(mass_density, species.get_mass() * number_density)
-        assert jnp.allclose(charge_density, species.get_charge() * number_density)
         assert jnp.allclose(drho_dA, species.get_mass() * dn_dA)
-        assert jnp.allclose(dq_dA, species.get_charge() * dn_dA)
         assert jnp.allclose(mass_jacobian, species.get_mass() * number_jacobian)
-        assert jnp.allclose(charge_jacobian, species.get_charge() * number_jacobian)
+
+
+def test_charge_density_deposits_charge_per_metric_shell_volume():
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = particle_species(
+        name="charged-dust",
+        number_of_particles=1,
+        charge=2.0,
+        mass=4.0,
+        temperature=0.0,
+        r=jnp.array([0.50]),
+        phi=jnp.zeros(1),
+        u_r=jnp.array([0.30]),
+        u_phi=jnp.array([0.40]),
+        weight=3.0,
+        r_min=0.0,
+        r_max=1.0,
+        dr=0.25,
+    )
+    A = jnp.ones_like(grid.r_full)
+
+    charge_density = compute_charge_density(species, A, grid)
+
+    expected_charge_density = jnp.zeros_like(grid.r_full)
+    shell_volume = 4.0 * jnp.pi * grid.r_full[2] ** 2 * grid.dr
+    expected_charge_density = expected_charge_density.at[2].set(
+        species.get_charge() / shell_volume
+    )
+
+    assert jnp.allclose(charge_density, expected_charge_density)
+
+
+def test_charge_density_is_not_multiplied_by_relativistic_energy_factor():
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    resting_species = make_species()
+    moving_species = resting_species.with_updated_radial_state(
+        resting_species.r,
+        jnp.array([0.4, -0.5, 0.6]),
+    )
+    A = jnp.ones_like(grid.r_full)
+
+    resting_charge_density = compute_charge_density(resting_species, A, grid)
+    moving_charge_density = compute_charge_density(moving_species, A, grid)
+    resting_mass_density = compute_mass_density(resting_species, A, grid)
+    moving_mass_density = compute_mass_density(moving_species, A, grid)
+
+    assert jnp.allclose(moving_charge_density, resting_charge_density)
+    assert not jnp.allclose(moving_mass_density, resting_mass_density)
 
 
 def test_scalar_mass_broadcasts_in_source_terms():

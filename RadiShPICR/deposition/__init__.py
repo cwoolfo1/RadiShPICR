@@ -1,7 +1,5 @@
-from .density import (
-    compute_charge_density,
-    compute_charge_density_metric_derivative,
-    compute_charge_density_metric_jacobian,
+from .charge_density import compute_charge_density
+from .mass_density import (
     compute_mass_density,
     compute_mass_density_metric_derivative,
     compute_mass_density_metric_jacobian,
@@ -17,8 +15,6 @@ from .particle_shapes import (
 
 __all__ = [
     "compute_charge_density",
-    "compute_charge_density_metric_derivative",
-    "compute_charge_density_metric_jacobian",
     "compute_mass_density",
     "compute_mass_density_metric_derivative",
     "compute_mass_density_metric_jacobian",
