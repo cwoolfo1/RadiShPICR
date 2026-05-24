@@ -8,6 +8,7 @@ pytest.importorskip("scipy")
 from RadiShPICR.EM.radial_poisson import (
     build_radial_poisson_operator,
     solve_radial_electric_field,
+    solve_radial_electric_field_from_charge_density,
 )
 from RadiShPICR.deposition import compute_charge_density
 from RadiShPICR.particles.particle_species import particle_species
@@ -82,6 +83,73 @@ def test_nonzero_charge_density_returns_finite_field_with_small_residual():
     assert np.isclose(float(result.electric_field[0]), 0.0)
     assert np.isclose(float(result.electric_field[-1]), 0.0)
     assert np.all(np.isfinite(np.asarray(result.electric_field)))
+    assert result.residual_norm <= 1.0e-9
+
+
+def test_radial_poisson_uses_sparse_direct_solve(monkeypatch):
+    import scipy.sparse.linalg as sparse_linalg
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = make_species(charge=0.2)
+    A = jnp.array([1.0, 1.05, 1.10, 1.15, 1.20])
+
+    calls = {"spsolve": 0, "gmres": 0}
+    original_spsolve = sparse_linalg.spsolve
+
+    def tracked_spsolve(operator, rhs):
+        calls["spsolve"] += 1
+        return original_spsolve(operator, rhs)
+
+    def tracked_gmres(*args, **kwargs):
+        calls["gmres"] += 1
+        raise AssertionError("radial Poisson solve should not call GMRES")
+
+    monkeypatch.setattr(sparse_linalg, "spsolve", tracked_spsolve)
+    monkeypatch.setattr(sparse_linalg, "gmres", tracked_gmres)
+
+    result = solve_radial_electric_field(species, A, grid, tolerance=1.0e-11)
+
+    assert calls == {"spsolve": 1, "gmres": 0}
+    assert result.info == 0
+    assert result.iterations == 1
+    assert result.residual_norm <= 1.0e-9
+
+
+def test_explicit_charge_density_solver_uses_sparse_direct_solve(monkeypatch):
+    import scipy.sparse.linalg as sparse_linalg
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    A = jnp.array([1.0, 1.05, 1.10, 1.15, 1.20])
+    charge_density = jnp.array([0.0, 0.5, -0.2, 0.3, 0.0])
+
+    calls = {"spsolve": 0, "gmres": 0}
+    original_spsolve = sparse_linalg.spsolve
+
+    def tracked_spsolve(operator, rhs):
+        calls["spsolve"] += 1
+        return original_spsolve(operator, rhs)
+
+    def tracked_gmres(*args, **kwargs):
+        calls["gmres"] += 1
+        raise AssertionError("explicit charge-density solve should not call GMRES")
+
+    monkeypatch.setattr(sparse_linalg, "spsolve", tracked_spsolve)
+    monkeypatch.setattr(sparse_linalg, "gmres", tracked_gmres)
+
+    result = solve_radial_electric_field_from_charge_density(
+        charge_density,
+        A,
+        grid,
+        epsilon_0=2.0,
+        tolerance=1.0e-11,
+    )
+
+    assert calls == {"spsolve": 1, "gmres": 0}
+    assert result.info == 0
+    assert result.iterations == 1
+    assert np.allclose(np.asarray(result.charge_density), np.asarray(charge_density))
+    assert np.isclose(float(result.electric_field[0]), 0.0)
+    assert np.isclose(float(result.electric_field[-1]), 0.0)
     assert result.residual_norm <= 1.0e-9
 
 

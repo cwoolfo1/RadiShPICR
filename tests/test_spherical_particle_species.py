@@ -25,6 +25,11 @@ from RadiShPICR.relativity.grid import build_radial_grid
 from RadiShPICR.relativity.metric import MetricState
 
 
+class FakeElectricSolveResult:
+    def __init__(self, electric_field):
+        self.electric_field = electric_field
+
+
 def make_species():
     return particle_species(
         name="ions",
@@ -207,6 +212,55 @@ def test_rk4_step_preserves_constrained_momenta_with_new_species():
     rk4_particles = rk4_step(species, fields, grid, dt=0.01, schwarzschild_mass=0.0)
 
     assert jnp.allclose(rk4_particles.u_phi, species.u_phi)
+
+
+def test_rk4_step_recomputes_electric_field_for_each_stage(monkeypatch):
+    import RadiShPICR.evolve as evolve
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = particle_species(
+        name="ions",
+        number_of_particles=3,
+        charge=2.0,
+        mass=4.0,
+        temperature=0.0,
+        r=jnp.array([0.25, 0.50, 0.75]),
+        phi=jnp.zeros(3),
+        u_r=jnp.zeros(3),
+        u_phi=jnp.zeros(3),
+        weight=5.0,
+        r_min=0.0,
+        r_max=1.0,
+        dr=0.25,
+    )
+    fields = MetricState(
+        rho=jnp.zeros_like(grid.r_full),
+        A=jnp.ones_like(grid.r_full),
+        lapse=jnp.ones_like(grid.r_full),
+        shift=jnp.zeros_like(grid.r_full),
+        extrinsic_curvature=jnp.zeros_like(grid.r_full),
+        S_r=jnp.zeros_like(grid.r_full),
+        S_rr=jnp.zeros_like(grid.r_full),
+        exact_exterior_points=jnp.ones_like(grid.r_full, dtype=bool),
+    )
+    calls = []
+
+    def fake_solve(stage_particles, A, solve_grid, shape_mode="nearest"):
+        calls.append(jnp.asarray(stage_particles.u_r))
+        return FakeElectricSolveResult(jnp.ones_like(solve_grid.r_full))
+
+    monkeypatch.setattr(evolve, "solve_radial_electric_field", fake_solve)
+
+    updated = rk4_step(
+        species,
+        fields,
+        grid,
+        dt=0.2,
+        schwarzschild_mass=0.0,
+    )
+
+    assert len(calls) == 4
+    assert jnp.allclose(updated.u_r, jnp.full_like(species.u_r, 0.1))
 
 
 def test_advance_one_step_is_rk4_only_api():

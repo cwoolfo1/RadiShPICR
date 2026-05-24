@@ -1,18 +1,48 @@
-from functools import partial
-
-import jax
 import jax.numpy as jnp
 
+from RadiShPICR.EM import compute_radial_lorentz_force_terms, solve_radial_electric_field
 from RadiShPICR.relativity.A import euler_step_A
 from RadiShPICR.relativity.geodesic import compute_geodesic_terms
 from RadiShPICR.relativity.metric import compute_metric
 
 
-@partial(jax.jit, static_argnames=("shape_mode",))
+def _compute_particle_derivatives(
+    particles,
+    fields,
+    grid,
+    schwarzschild_mass,
+    shape_mode="nearest",
+):
+    geodesic_terms = compute_geodesic_terms(
+        particles,
+        fields,
+        grid,
+        schwarzschild_mass,
+        shape_mode=shape_mode,
+    )
+    electric_solve = solve_radial_electric_field(
+        particles,
+        fields.A,
+        grid,
+        shape_mode=shape_mode,
+    )
+    lorentz_terms = compute_radial_lorentz_force_terms(
+        particles,
+        fields,
+        grid,
+        electric_solve.electric_field,
+        shape_mode=shape_mode,
+    )
+
+    return geodesic_terms._replace(
+        du_r_dt=geodesic_terms.du_r_dt + lorentz_terms.du_r_dt,
+    )
+
+
 def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="nearest"):
     dt_value = jnp.asarray(dt, dtype=particles.r.dtype)
 
-    k1 = compute_geodesic_terms(
+    k1 = _compute_particle_derivatives(
         particles,
         fields,
         grid,
@@ -25,7 +55,7 @@ def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="neares
         particles.u_r + 0.5 * dt_value * k1.du_r_dt,
     )
 
-    k2 = compute_geodesic_terms(
+    k2 = _compute_particle_derivatives(
         state_k2,
         fields,
         grid,
@@ -38,7 +68,7 @@ def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="neares
         particles.u_r + 0.5 * dt_value * k2.du_r_dt,
     )
 
-    k3 = compute_geodesic_terms(
+    k3 = _compute_particle_derivatives(
         state_k3,
         fields,
         grid,
@@ -51,7 +81,7 @@ def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="neares
         particles.u_r + dt_value * k3.du_r_dt,
     )
 
-    k4 = compute_geodesic_terms(
+    k4 = _compute_particle_derivatives(
         state_k4,
         fields,
         grid,
