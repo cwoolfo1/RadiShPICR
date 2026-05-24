@@ -33,11 +33,11 @@ def _require_scipy():
 
 
 def build_radial_poisson_operator(A, grid):
-    """Build the interior sparse operator for the radial electric field.
+    """Build the sparse operator for the radial electric field.
 
-    The unknown vector contains only ``E_r[1:-1]``. The first and last
-    electric-field entries are fixed to zero, so centered derivative references
-    to the boundary do not add right-hand-side terms.
+    The unknown vector contains ``E_r[1:]``. The center is fixed to
+    ``E_r[0] = 0`` by spherical symmetry, while the outer point uses a backward
+    finite-difference equation.
     """
 
     sparse, _ = _require_scipy()
@@ -55,14 +55,20 @@ def build_radial_poisson_operator(A, grid):
     if np.any(A_array == 0.0):
         raise ValueError("A must not contain zero values.")
 
-    num_interior = A_array.size - 2
+    num_unknowns = A_array.size - 1
     dr = float(grid.dr)
     row_indices = []
     column_indices = []
     values = []
 
     for row, grid_index in enumerate(range(1, A_array.size - 1)):
-        diagonal = (A_array[grid_index + 1] - A_array[grid_index - 1]) / (
+        radial_coordinate = float(grid.r_full[grid_index])
+        if radial_coordinate <= 0.0:
+            raise ValueError("Non-center radial grid points must be positive.")
+
+        diagonal = 2.0 / radial_coordinate + (
+            A_array[grid_index + 1] - A_array[grid_index - 1]
+        ) / (
             2.0 * dr * A_array[grid_index]
         )
         row_indices.append(row)
@@ -76,14 +82,27 @@ def build_radial_poisson_operator(A, grid):
             values.append(-1.0 / (2.0 * dr))
 
         right_grid_index = grid_index + 1
-        if right_grid_index <= A_array.size - 2:
+        if right_grid_index <= A_array.size - 1:
             row_indices.append(row)
             column_indices.append(row + 1)
             values.append(1.0 / (2.0 * dr))
 
+    outer_row = num_unknowns - 1
+    outer_radial_coordinate = float(grid.r_full[-1])
+    if outer_radial_coordinate <= 0.0:
+        raise ValueError("The outer radial grid point must be positive.")
+
+    outer_dlnA_dr = (A_array[-1] - A_array[-2]) / (dr * A_array[-1])
+    row_indices.extend([outer_row, outer_row])
+    column_indices.extend([outer_row - 1, outer_row])
+    values.extend([
+        -1.0 / dr,
+        1.0 / dr + 2.0 / outer_radial_coordinate + outer_dlnA_dr,
+    ])
+
     return sparse.csr_matrix(
         (values, (row_indices, column_indices)),
-        shape=(num_interior, num_interior),
+        shape=(num_unknowns, num_unknowns),
     )
 
 
@@ -118,7 +137,7 @@ def solve_radial_electric_field_from_charge_density(
         raise ValueError("charge_density must contain only finite values.")
 
     operator = build_radial_poisson_operator(A, grid)
-    rhs = charge_density_array[1:-1] / float(epsilon_0)
+    rhs = charge_density_array[1:] / float(epsilon_0)
 
     if np.allclose(rhs, 0.0):
         interior_solution = np.zeros_like(rhs)
@@ -131,7 +150,7 @@ def solve_radial_electric_field_from_charge_density(
     residual_norm = float(np.linalg.norm(residual, ord=np.inf))
 
     electric_field = np.zeros_like(np.asarray(grid.r_full, dtype=float))
-    electric_field[1:-1] = interior_solution
+    electric_field[1:] = interior_solution
 
     return RadialElectricFieldSolveResult(
         electric_field=jnp.asarray(electric_field),
