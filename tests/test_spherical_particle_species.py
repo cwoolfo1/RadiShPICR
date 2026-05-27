@@ -303,5 +303,116 @@ def test_rk4_step_recomputes_electric_field_for_each_stage(monkeypatch):
     assert jnp.allclose(updated.u_r, jnp.full_like(species.u_r, 0.1))
 
 
+def test_advance_one_step_recomputes_metric_and_electric_field_for_dynamic_rk4(monkeypatch):
+    import RadiShPICR.evolve as evolve
+    from RadiShPICR.EM.lorentz_force import LorentzForceTerms
+    from RadiShPICR.relativity.geodesic import GeodesicTerms
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = particle_species(
+        name="ions",
+        number_of_particles=3,
+        charge=2.0,
+        mass=4.0,
+        temperature=0.0,
+        r=jnp.array([0.25, 0.50, 0.75]),
+        phi=jnp.zeros(3),
+        u_r=jnp.zeros(3),
+        u_phi=jnp.zeros(3),
+        weight=5.0,
+        r_min=0.0,
+        r_max=1.0,
+        dr=0.25,
+    )
+    metric_calls = []
+    electric_field_calls = []
+
+    def fake_compute_metric(
+        stage_particles,
+        metric_grid,
+        schwarzschild_mass,
+        initial_A_guess=None,
+        shape_mode="nearest",
+    ):
+        stage_radius_mean = jnp.mean(stage_particles.r)
+        metric_calls.append(stage_radius_mean)
+        stage_A = jnp.full_like(metric_grid.r_full, stage_radius_mean)
+
+        return MetricState(
+            rho=jnp.zeros_like(metric_grid.r_full),
+            A=stage_A,
+            lapse=jnp.ones_like(metric_grid.r_full),
+            shift=jnp.zeros_like(metric_grid.r_full),
+            extrinsic_curvature=jnp.zeros_like(metric_grid.r_full),
+            S_r=jnp.zeros_like(metric_grid.r_full),
+            S_rr=jnp.zeros_like(metric_grid.r_full),
+            exact_exterior_points=jnp.ones_like(metric_grid.r_full, dtype=bool),
+        )
+
+    def fake_compute_geodesic_terms(
+        stage_particles,
+        metric,
+        metric_grid,
+        schwarzschild_mass,
+        shape_mode="nearest",
+    ):
+        return GeodesicTerms(
+            dr_dt=stage_particles.r,
+            dphi_dt=jnp.zeros_like(stage_particles.r),
+            du_r_dt=jnp.zeros_like(stage_particles.r),
+        )
+
+    def fake_compute_radial_lorentz_force_terms(
+        stage_particles,
+        metric,
+        metric_grid,
+        electric_field,
+        shape_mode="nearest",
+    ):
+        return LorentzForceTerms(du_r_dt=jnp.zeros_like(stage_particles.r))
+
+    def fake_solve(particle_list, A, solve_grid, shape_mode="nearest"):
+        stage_particles = particle_list[0]
+        electric_field_calls.append((jnp.mean(stage_particles.r), A[0]))
+        return jnp.zeros_like(solve_grid.r_full), jnp.zeros_like(solve_grid.r_full)
+
+    monkeypatch.setattr(evolve, "compute_metric", fake_compute_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_compute_geodesic_terms)
+    monkeypatch.setattr(
+        evolve,
+        "compute_radial_lorentz_force_terms",
+        fake_compute_radial_lorentz_force_terms,
+    )
+    monkeypatch.setattr(
+        evolve,
+        "compute_charge_density_and_radial_electric_field",
+        fake_solve,
+    )
+
+    updated_particles, returned_fields = advance_one_step(
+        species,
+        grid,
+        dt=0.2,
+        schwarzschild_mass=0.0,
+    )
+
+    expected_stage_radius_means = jnp.array([0.5, 0.55, 0.555, 0.611])
+    expected_final_radius_mean = jnp.mean(updated_particles.r)
+
+    assert len(metric_calls) == 5
+    assert jnp.allclose(jnp.asarray(metric_calls[:4]), expected_stage_radius_means)
+    assert jnp.allclose(metric_calls[-1], expected_final_radius_mean)
+    assert len(electric_field_calls) == 4
+    assert jnp.allclose(
+        jnp.asarray([call[0] for call in electric_field_calls]),
+        expected_stage_radius_means,
+    )
+    assert jnp.allclose(
+        jnp.asarray([call[1] for call in electric_field_calls]),
+        expected_stage_radius_means,
+    )
+    assert jnp.allclose(returned_fields.A, expected_final_radius_mean)
+
+
 def test_advance_one_step_is_rk4_only_api():
     assert "integrator" not in inspect.signature(advance_one_step).parameters

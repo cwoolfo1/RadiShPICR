@@ -42,7 +42,15 @@ def _compute_particle_derivatives(
     )
 
 
-def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="nearest"):
+def rk4_step(
+    particles,
+    fields,
+    grid,
+    dt,
+    schwarzschild_mass,
+    shape_mode="nearest",
+    recompute_metric_each_stage=False,
+):
     dt_value = jnp.asarray(dt, dtype=particles.r.dtype)
 
     k1 = _compute_particle_derivatives(
@@ -57,10 +65,22 @@ def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="neares
         particles.phi + 0.5 * dt_value * k1.dphi_dt,
         particles.u_r + 0.5 * dt_value * k1.du_r_dt,
     )
+    # Dynamic runs solve the metric constraint at each RK stage state before
+    # depositing charge and solving Gauss law for that same stage.
+    if recompute_metric_each_stage:
+        fields_k2 = compute_metric(
+            state_k2,
+            grid,
+            schwarzschild_mass,
+            initial_A_guess=fields.A,
+            shape_mode=shape_mode,
+        )
+    else:
+        fields_k2 = fields
 
     k2 = _compute_particle_derivatives(
         state_k2,
-        fields,
+        fields_k2,
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
@@ -70,10 +90,20 @@ def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="neares
         particles.phi + 0.5 * dt_value * k2.dphi_dt,
         particles.u_r + 0.5 * dt_value * k2.du_r_dt,
     )
+    if recompute_metric_each_stage:
+        fields_k3 = compute_metric(
+            state_k3,
+            grid,
+            schwarzschild_mass,
+            initial_A_guess=fields_k2.A,
+            shape_mode=shape_mode,
+        )
+    else:
+        fields_k3 = fields
 
     k3 = _compute_particle_derivatives(
         state_k3,
-        fields,
+        fields_k3,
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
@@ -83,10 +113,20 @@ def rk4_step(particles, fields, grid, dt, schwarzschild_mass, shape_mode="neares
         particles.phi + dt_value * k3.dphi_dt,
         particles.u_r + dt_value * k3.du_r_dt,
     )
+    if recompute_metric_each_stage:
+        fields_k4 = compute_metric(
+            state_k4,
+            grid,
+            schwarzschild_mass,
+            initial_A_guess=fields_k3.A,
+            shape_mode=shape_mode,
+        )
+    else:
+        fields_k4 = fields
 
     k4 = _compute_particle_derivatives(
         state_k4,
-        fields,
+        fields_k4,
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
@@ -134,7 +174,7 @@ def advance_one_step(
         fields = compute_metric(
             particles,
             grid,
-            schwarzschild_mass,
+            current_mass,
             initial_A_guess=prepared_initial_A_guess,
             shape_mode=shape_mode,
         )
@@ -148,6 +188,16 @@ def advance_one_step(
         dt,
         current_mass,
         shape_mode=shape_mode,
+        recompute_metric_each_stage=fixed_fields is None,
     )
+
+    if fixed_fields is None:
+        fields = compute_metric(
+            updated_particles,
+            grid,
+            current_mass,
+            initial_A_guess=fields.A,
+            shape_mode=shape_mode,
+        )
 
     return updated_particles, fields
