@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
-import numpy as np
-from scipy import sparse
-from scipy.sparse import linalg as sparse_linalg
 
 from RadiShPICR.deposition import compute_charge_density
 
 
 def build_radial_gauss_law_operator(A, grid):
-    """Build the sparse finite-difference operator for radial Gauss law.
+    """Build the dense finite-difference operator for radial Gauss law.
 
     The continuum equation solved here is
 
@@ -21,55 +18,32 @@ def build_radial_gauss_law_operator(A, grid):
     boundary value is solved rather than pinned.
     """
 
-    A_array = np.asarray(A, dtype=float)
-    radial_grid = np.asarray(grid.r_full, dtype=float)
-    if A_array.shape != radial_grid.shape:
-        raise ValueError(
-            "A and grid.r_full must have the same shape for the radial Gauss-law stencil."
-        )
-
-    num_unknowns = A_array.size - 1
-    dr = float(grid.dr)
-    row_indices = []
-    column_indices = []
-    values = []
+    A = jnp.asarray(A)
+    radial_grid = jnp.asarray(grid.r_full)
+    num_unknowns = A.shape[0] - 1
+    dr = grid.dr
+    operator = jnp.zeros((num_unknowns, num_unknowns), dtype=A.dtype)
 
     # Interior rows: centered derivative for dE_r/dr and centered d ln(A)/dr.
-    for row, grid_index in enumerate(range(1, A_array.size - 1)):
-        r_i = radial_grid[grid_index]
-        dlnA_dr = (A_array[grid_index + 1] - A_array[grid_index - 1]) / (
-            2.0 * dr * A_array[grid_index]
-        )
-
-        row_indices.append(row)
-        column_indices.append(row)
-        values.append(2.0 / r_i + dlnA_dr)
-
-        if grid_index - 1 >= 1:
-            row_indices.append(row)
-            column_indices.append(row - 1)
-            values.append(-1.0 / (2.0 * dr))
-
-        if grid_index + 1 <= A_array.size - 1:
-            row_indices.append(row)
-            column_indices.append(row + 1)
-            values.append(1.0 / (2.0 * dr))
+    grid_indices = jnp.arange(1, A.shape[0] - 1)
+    rows = grid_indices - 1
+    dlnA_dr = (A[grid_indices + 1] - A[grid_indices - 1]) / (
+        2.0 * dr * A[grid_indices]
+    )
+    operator = operator.at[rows, rows].set(2.0 / radial_grid[grid_indices] + dlnA_dr)
+    operator = operator.at[rows[1:], rows[1:] - 1].set(-1.0 / (2.0 * dr))
+    operator = operator.at[rows, rows + 1].set(1.0 / (2.0 * dr))
 
     # Outer row: one-sided derivative closes the solved field at r_max.
     outer_row = num_unknowns - 1
     outer_r = radial_grid[-1]
-    outer_dlnA_dr = (A_array[-1] - A_array[-2]) / (dr * A_array[-1])
-    row_indices.extend([outer_row, outer_row])
-    column_indices.extend([outer_row - 1, outer_row])
-    values.extend([
-        -1.0 / dr,
-        1.0 / dr + 2.0 / outer_r + outer_dlnA_dr,
-    ])
-
-    return sparse.csr_matrix(
-        (values, (row_indices, column_indices)),
-        shape=(num_unknowns, num_unknowns),
+    outer_dlnA_dr = (A[-1] - A[-2]) / (dr * A[-1])
+    operator = operator.at[outer_row, outer_row - 1].set(-1.0 / dr)
+    operator = operator.at[outer_row, outer_row].set(
+        1.0 / dr + 2.0 / outer_r + outer_dlnA_dr
     )
+
+    return operator
 
 
 def compute_radial_electric_field(charge_density, A, grid, epsilon_0=1.0):
@@ -92,27 +66,15 @@ def compute_radial_electric_field(charge_density, A, grid, epsilon_0=1.0):
         Radial electric field ``E_r`` on ``grid.r_full``.
     """
 
-    charge_density_array = np.asarray(charge_density, dtype=float)
-    radial_grid = np.asarray(grid.r_full, dtype=float)
-    if charge_density_array.shape != radial_grid.shape:
-        raise ValueError(
-            "charge_density and grid.r_full must have the same shape for Gauss law."
-        )
-
+    charge_density = jnp.asarray(charge_density)
     operator = build_radial_gauss_law_operator(A, grid)
-    rhs = charge_density_array[1:] / float(epsilon_0)
+    rhs = charge_density[1:] / float(epsilon_0)
 
-    # Direct solves of the homogeneous system can return NaNs for the singular
-    # zero-source case, while the physical Gauss-law field is exactly zero.
-    if np.allclose(rhs, 0.0):
-        interior_electric_field = np.zeros_like(rhs)
-    else:
-        interior_electric_field = sparse_linalg.spsolve(operator, rhs)
-        interior_electric_field = np.asarray(interior_electric_field, dtype=float)
+    interior_electric_field = jnp.linalg.solve(operator, rhs)
 
-    electric_field = np.zeros_like(radial_grid)
-    electric_field[1:] = interior_electric_field
-    return jnp.asarray(electric_field)
+    electric_field = jnp.zeros_like(grid.r_full, dtype=interior_electric_field.dtype)
+    electric_field = electric_field.at[1:].set(interior_electric_field)
+    return electric_field
 
 
 def compute_charge_density_and_radial_electric_field(

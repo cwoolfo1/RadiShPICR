@@ -1,3 +1,5 @@
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 
@@ -8,8 +10,6 @@ from RadiShPICR.deposition import (
 )
 from RadiShPICR.deposition.number_density import (
     compute_number_density,
-    compute_number_density_metric_derivative,
-    compute_number_density_metric_jacobian,
 )
 from RadiShPICR.relativity.schwarzschild import schwarzschild_A, schwarzschild_u
 from RadiShPICR.relativity.utils import (
@@ -94,25 +94,13 @@ def build_dense_operator( radial_grid, dr, jacobian_diagonal, exact_exterior_poi
     return matrix
 
 
-def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
-    """Build the matter source terms needed by the coupled Newton solve."""
-
+def metric_mass_energy_density_from_U(particles, U, grid, shape_mode="nearest"):
+    """Compute the particle plus EM mass-energy density for the A equation."""
     A = U**2
     number_density = compute_number_density(particles, A, grid, shape_mode=shape_mode)
-    dn_dA = compute_number_density_metric_derivative(
-        particles,
-        A,
-        grid,
-        shape_mode=shape_mode,
-    )
-    dn_dA_jacobian = compute_number_density_metric_jacobian(
-        particles,
-        A,
-        grid,
-        shape_mode=shape_mode,
-    )
     particle_mass = particles.get_mass()
     particle_rho = particle_mass * number_density
+
     _, electric_field = compute_charge_density_and_radial_electric_field(
         [particles],
         A,
@@ -121,14 +109,40 @@ def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
     )
     rho_EM = compute_EM_energy_density(electric_field)
     rho = particle_rho + rho_EM
-    # The EM energy density changes the Hamiltonian-constraint source. Its
-    # derivative through the Gauss-law solve is intentionally not included in
-    # the Newton matrix in this pass.
-    drho_dA = particle_mass * dn_dA
-    drho_dA_jacobian = particle_mass * dn_dA_jacobian
+    return A, rho
+
+
+def metric_source_term_from_U(particles, U, grid, shape_mode="nearest"):
+    """Hamiltonian-constraint source term as a function of ``U = sqrt(A)``."""
+    _, rho = metric_mass_energy_density_from_U(
+        particles,
+        U,
+        grid,
+        shape_mode=shape_mode,
+    )
+    return -2.0 * jnp.pi * rho
+
+
+def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
+    """Build the mass-energy source and its JAX-autodiff Jacobian."""
+
+    A, rho = metric_mass_energy_density_from_U(
+        particles,
+        U,
+        grid,
+        shape_mode=shape_mode,
+    )
     source_term = -2.0 * jnp.pi * rho
-    source_term_U_derivative = -4.0 * jnp.pi * U * drho_dA
-    source_term_U_jacobian = -4.0 * jnp.pi * drho_dA_jacobian * U[jnp.newaxis, :]
+    source_term_U_jacobian = jax.jacfwd(
+        lambda trial_U: metric_source_term_from_U(
+            particles,
+            trial_U,
+            grid,
+            shape_mode=shape_mode,
+        )
+    )(U)
+    source_term_U_derivative = jnp.diag(source_term_U_jacobian)
+    drho_dA = -source_term_U_derivative / (4.0 * jnp.pi * U)
     return (
         A,
         rho,
@@ -139,6 +153,10 @@ def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
     )
 
 
+@partial(
+    jax.jit,
+    static_argnames=("max_newton_steps", "max_line_search_steps", "shape_mode"),
+)
 def solve_metric_A(
     particles,
     grid,
@@ -191,14 +209,23 @@ def solve_metric_A(
     residual_norm_inf = jnp.max(jnp.abs(residual))
     # define the initial residual and its norms for the convergence checks and line search
 
-    U_current = U_initial
-    step = 0
-    converged = bool(float(residual_norm_inf) <= tolerance)
-    # build initial state for the Newton iteration. The loop stays at Python
-    # level because the radial Gauss-law solve inside metric_source_terms_from_U
-    # is a SciPy sparse solve, not a JAX operation.
+    initial_state = (
+        U_initial,
+        residual,
+        residual_norm_sq,
+        residual_norm_inf,
+        jnp.int32(0),
+        residual_norm_inf <= tolerance,
+    )
+    # build initial state for the JAX Newton iteration
 
-    while (not converged) and step < max_newton_steps:
+    def newton_cond(state):
+        _, _, _, _, step, converged = state
+        return jnp.logical_and(~converged, step < max_newton_steps)
+
+    def newton_body(state):
+        U_current, _, _, _, step, _ = state
+
         _, _, _, source_term_current, _, source_term_U_jacobian = (
             metric_source_terms_from_U(
                 particles,
@@ -237,88 +264,111 @@ def solve_metric_A(
         # so the sufficient-decrease condition is:
         #   ||R_trial||^2 <= (1 - 2 c alpha) ||R||^2
 
+        line_search_init = (
+            jnp.asarray(1.0, dtype=U_current.dtype),
+            U_current,
+            current_residual,
+            residual_norm_sq_current,
+            jnp.bool_(False),
+        )
 
-        damping = jnp.asarray(1.0, dtype=U_current.dtype)
-        U_best = U_current
-        res_best = current_residual
-        norm_sq_best = residual_norm_sq_current
-        accepted = False
-        current_norm_sq_value = float(residual_norm_sq_current)
-        # start the line search with a full Newton step and no accepted solution
-
-        for _ in range(max_line_search_steps):
+        def line_search_body(_, ls_state):
+            damping, U_best, res_best, norm_sq_best, accepted = ls_state
             trial_U = U_current + damping * delta_U
             # compute the trial solution for this line search step
 
             trial_U = enforce_vaccuum_U(trial_U)
             # enforce the exact Schwarzschild solution for U in the vacuum region on the trial solution
 
-            trial_is_physical = bool(
-                jnp.logical_and(
-                    jnp.all(jnp.isfinite(trial_U)),
-                    jnp.all(trial_U > 0.0),
-                )
-            )
-            # check if the trial solution is physical (finite and positive, since U = sqrt(A))
-
-            if trial_is_physical:
+            def evaluate_trial_residual(candidate_U):
                 _, _, _, trial_source_term, _, _ = metric_source_terms_from_U(
                     particles,
-                    trial_U,
+                    candidate_U,
                     grid,
                     shape_mode=shape_mode,
                 )
                 # compute the source term for the trial solution to evaluate the residual at that point
 
                 trial_residual_local = nonlinear_residual_u(
-                    trial_U, trial_source_term, grid,
+                    candidate_U, trial_source_term, grid,
                     boundary_u, exact_exterior_points,
                 )
                 # compute the trial residual at the trial solution
 
                 trial_norm_sq_local = jnp.dot(trial_residual_local, trial_residual_local)
                 # compute the trial residual norm squared for the Armijo condition
-            else:
-                trial_residual_local = jnp.full_like(current_residual, jnp.inf)
-                trial_norm_sq_local = jnp.asarray(jnp.inf, dtype=current_residual.dtype)
-                # if the trial solution is not physical, return invalid values that will fail the Armijo condition
 
-            armijo_threshold = (
-                1.0 - 2.0 * armijo_c * float(damping)
-            ) * current_norm_sq_value
-            trial_norm_sq_value = float(trial_norm_sq_local)
-            accept_this = bool(jnp.isfinite(trial_norm_sq_local)) and (
-                trial_norm_sq_value <= armijo_threshold
+                return trial_residual_local, trial_norm_sq_local
+
+            def reject_trial_residual(_):
+                invalid_residual = jnp.full_like(current_residual, jnp.inf)
+                invalid_norm_sq = jnp.asarray(jnp.inf, dtype=current_residual.dtype)
+                return invalid_residual, invalid_norm_sq
+
+            trial_is_physical = jnp.logical_and(
+                jnp.all(jnp.isfinite(trial_U)),
+                jnp.all(trial_U > 0.0),
+            )
+            # check if the trial solution is physical (finite and positive, since U = sqrt(A))
+
+            trial_residual_local, trial_norm_sq_local = jax.lax.cond(
+                trial_is_physical,
+                evaluate_trial_residual,
+                reject_trial_residual,
+                trial_U,
             )
 
-            # Update best values only on first acceptance
-            if bool(accept_this):
-                U_best = trial_U
-                res_best = trial_residual_local
-                norm_sq_best = trial_norm_sq_local
-                accepted = True
-                break
+            armijo_threshold = (
+                1.0 - 2.0 * armijo_c * damping
+            ) * residual_norm_sq_current
+            accept_this = jnp.logical_and(
+                ~accepted,
+                jnp.logical_and(
+                    jnp.isfinite(trial_norm_sq_local),
+                    trial_norm_sq_local <= armijo_threshold,
+                ),
+            )
 
-            # Halve the damping for the next attempt (only matters if not accepted)
-            damping = damping * 0.5
+            U_best = jnp.where(accept_this, trial_U, U_best)
+            res_best = jnp.where(accept_this, trial_residual_local, res_best)
+            norm_sq_best = jnp.where(accept_this, trial_norm_sq_local, norm_sq_best)
+            accepted = jnp.logical_or(accepted, accept_this)
+            damping = jnp.where(accepted, damping, damping * 0.5)
 
+            return damping, U_best, res_best, norm_sq_best, accepted
+
+        _, U_new, res_new, norm_sq_new, accepted = jax.lax.fori_loop(
+            0,
+            max_line_search_steps,
+            line_search_body,
+            line_search_init,
+        )
         # run the line search loop to find the step size that satisfies the Armijo condition
 
-        # If line search failed, keep current state (converged stays False)
-        U_current = U_best if accepted else U_current
+        U_out = jnp.where(accepted, U_new, U_current)
         # update the solution to the new trial solution if accepted, otherwise keep the current solution
-        residual = res_best if accepted else current_residual
+        res_out = jnp.where(accepted, res_new, current_residual)
         # update the residual to the new trial residual if accepted, otherwise keep the current residual
-        residual_norm_sq = norm_sq_best if accepted else residual_norm_sq_current
+        norm_sq_out = jnp.where(accepted, norm_sq_new, residual_norm_sq_current)
         # update the residual norm squared to the new trial value if accepted, otherwise keep the current value
-        residual_norm_inf = jnp.max(jnp.abs(residual))
+        norm_inf_out = jnp.max(jnp.abs(res_out))
         # compute the infinity norm of the new residual for the convergence check
-        converged = bool(float(residual_norm_inf) <= tolerance)
+        converged_out = norm_inf_out <= tolerance
         # check if the new solution is converged based on the infinity norm of the residual
 
-        step = step + 1
+        return (
+            U_out,
+            res_out,
+            norm_sq_out,
+            norm_inf_out,
+            step + jnp.int32(1),
+            converged_out,
+        )
 
-    U_final = U_current
+    U_final, residual, residual_norm_sq, residual_norm_inf, step, converged = (
+        jax.lax.while_loop(newton_cond, newton_body, initial_state)
+    )
+
     U_final = jnp.where(exact_exterior_points, boundary_u, U_final)
 
     return U_final**2, jnp.bool_(converged), residual_norm_inf

@@ -240,6 +240,71 @@ def test_A_solver_source_terms_include_electromagnetic_energy_density(monkeypatc
     assert jnp.allclose(source_term, -2.0 * jnp.pi * expected_total_rho)
 
 
+def test_A_solver_source_jacobian_matches_jax_autodiff_with_EM():
+    import RadiShPICR.relativity.A as A_solver
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = make_species()
+    U = jnp.sqrt(jnp.array([1.0, 1.05, 1.10, 1.15, 1.20]))
+
+    _, _, _, _, _, source_term_U_jacobian = A_solver.metric_source_terms_from_U(
+        species,
+        U,
+        grid,
+    )
+
+    def source_term_from_U(trial_U):
+        _, _, _, source_term, _, _ = A_solver.metric_source_terms_from_U(
+            species,
+            trial_U,
+            grid,
+        )
+        return source_term
+
+    autodiff_source_term_U_jacobian = jax.jacfwd(source_term_from_U)(U)
+
+    assert jnp.allclose(
+        source_term_U_jacobian,
+        autodiff_source_term_U_jacobian,
+        rtol=2.0e-5,
+        atol=2.0e-7,
+    )
+
+
+def test_solve_metric_A_is_jitted_for_zero_source():
+    import RadiShPICR.relativity.A as A_solver
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = particle_species(
+        name="neutral-test-particles",
+        number_of_particles=1,
+        charge=0.0,
+        mass=0.0,
+        temperature=0.0,
+        r=jnp.array([0.50]),
+        phi=jnp.zeros(1),
+        u_r=jnp.zeros(1),
+        u_phi=jnp.zeros(1),
+        weight=1.0,
+        r_min=0.0,
+        r_max=1.0,
+        dr=0.25,
+    )
+    initial_A = jnp.ones_like(grid.r_full)
+
+    solved_A, converged, residual = A_solver.solve_metric_A(
+        species,
+        grid,
+        schwarzschild_mass=0.0,
+        initial_A_guess=initial_A,
+        max_newton_steps=3,
+    )
+
+    assert bool(converged)
+    assert float(residual) <= 1.0e-6
+    assert jnp.allclose(solved_A, initial_A)
+
+
 def test_compute_metric_reports_electromagnetic_energy_density_in_rho(monkeypatch):
     import RadiShPICR.relativity.metric as metric_module
 
@@ -290,6 +355,99 @@ def test_compute_metric_reports_electromagnetic_energy_density_in_rho(monkeypatc
     expected_rho = jnp.where(metric.exact_exterior_points, 0.0, expected_rho)
 
     assert jnp.allclose(metric.rho, expected_rho)
+
+
+def test_compute_metric_reports_electromagnetic_stress_in_Srr(monkeypatch):
+    import RadiShPICR.relativity.metric as metric_module
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = make_species()
+    solved_A = jnp.array([1.0, 1.05, 1.10, 1.15, 1.20])
+    electric_field = jnp.array([0.0, 0.3, 0.5, 0.7, 0.0])
+
+    def fake_solve_metric_A(
+        particles,
+        metric_grid,
+        schwarzschild_mass,
+        initial_A_guess,
+        shape_mode="nearest",
+    ):
+        return solved_A, True, 0.0
+
+    def fake_charge_density_and_field(
+        particle_list,
+        metric_A,
+        solve_grid,
+        shape_mode="nearest",
+    ):
+        assert particle_list == [species]
+        assert jnp.allclose(metric_A, solved_A)
+        assert solve_grid is grid
+        return jnp.zeros_like(grid.r_full), electric_field
+
+    monkeypatch.setattr(metric_module, "solve_metric_A", fake_solve_metric_A)
+    monkeypatch.setattr(
+        metric_module,
+        "compute_charge_density_and_radial_electric_field",
+        fake_charge_density_and_field,
+    )
+
+    metric = compute_metric(
+        species,
+        grid,
+        schwarzschild_mass=0.0,
+        initial_A_guess=solved_A,
+    )
+
+    expected_Srr = compute_Srr(species, solved_A, grid) + 0.5 * solved_A**2 * electric_field**2
+    expected_Srr = jnp.where(metric.exact_exterior_points, 0.0, expected_Srr)
+
+    assert jnp.allclose(metric.S_rr, expected_Srr)
+
+
+def test_compute_metric_keeps_neutral_Srr_particle_only(monkeypatch):
+    import RadiShPICR.relativity.metric as metric_module
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    species = make_species()
+    solved_A = jnp.array([1.0, 1.05, 1.10, 1.15, 1.20])
+    electric_field = jnp.zeros_like(grid.r_full)
+
+    def fake_solve_metric_A(
+        particles,
+        metric_grid,
+        schwarzschild_mass,
+        initial_A_guess,
+        shape_mode="nearest",
+    ):
+        return solved_A, True, 0.0
+
+    def fake_charge_density_and_field(
+        particle_list,
+        metric_A,
+        solve_grid,
+        shape_mode="nearest",
+    ):
+        return jnp.zeros_like(grid.r_full), electric_field
+
+    monkeypatch.setattr(metric_module, "solve_metric_A", fake_solve_metric_A)
+    monkeypatch.setattr(
+        metric_module,
+        "compute_charge_density_and_radial_electric_field",
+        fake_charge_density_and_field,
+    )
+
+    metric = compute_metric(
+        species,
+        grid,
+        schwarzschild_mass=0.0,
+        initial_A_guess=solved_A,
+    )
+
+    expected_Srr = compute_Srr(species, solved_A, grid)
+    expected_Srr = jnp.where(metric.exact_exterior_points, 0.0, expected_Srr)
+
+    assert jnp.allclose(metric.S_rr, expected_Srr)
 
 
 def test_geodesic_terms_return_evolved_orbit_derivatives():

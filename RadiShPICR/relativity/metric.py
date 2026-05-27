@@ -2,7 +2,7 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
-from RadiShPICR.EM.EM_energy_momentum_tensor import compute_EM_energy_density
+from RadiShPICR.EM.EM_energy_momentum_tensor import compute_EM_energy_density, compute_EM_stress
 from RadiShPICR.EM.gauss_law import compute_charge_density_and_radial_electric_field
 from RadiShPICR.deposition import compute_mass_density
 from RadiShPICR.deposition.particle_shapes import last_shape_support_index
@@ -81,6 +81,7 @@ def compute_metric(
     rho = particle_rho + compute_EM_energy_density(electric_field)
     S_r = compute_Sr(particles, A, grid, shape_mode=shape_mode)
     S_rr = compute_Srr(particles, A, grid, shape_mode=shape_mode)
+    S_rr = S_rr + compute_EM_stress(electric_field, A)
 
     # Birkhoff's theorem fixes the discrete exterior to the vacuum solution.
     rho = jnp.where(exact_exterior_points, 0.0, rho)

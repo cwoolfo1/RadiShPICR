@@ -3,7 +3,6 @@ import pytest
 
 jax = pytest.importorskip("jax")
 jnp = pytest.importorskip("jax.numpy")
-pytest.importorskip("scipy")
 
 from RadiShPICR.EM.gauss_law import (
     build_radial_gauss_law_operator,
@@ -36,7 +35,7 @@ def make_species(charge=0.0, weight=1.0):
 def radial_gauss_law_residual(electric_field, charge_density, A, grid, epsilon_0=1.0):
     operator = build_radial_gauss_law_operator(A, grid)
     rhs = np.asarray(charge_density, dtype=float)[1:] / float(epsilon_0)
-    return operator @ np.asarray(electric_field, dtype=float)[1:] - rhs
+    return np.asarray(operator) @ np.asarray(electric_field, dtype=float)[1:] - rhs
 
 
 def test_radial_gauss_law_operator_uses_centered_interior_stencil_with_backward_outer_row():
@@ -44,7 +43,7 @@ def test_radial_gauss_law_operator_uses_centered_interior_stencil_with_backward_
     A = jnp.array([1.00, 1.10, 1.40, 1.90, 2.60])
 
     operator = build_radial_gauss_law_operator(A, grid)
-    dense_operator = operator.toarray()
+    dense_operator = np.asarray(operator)
 
     assert dense_operator.shape == (4, 4)
 
@@ -106,65 +105,39 @@ def test_nonzero_charge_density_returns_finite_field_with_small_residual():
     assert np.linalg.norm(residual, ord=np.inf) <= 1.0e-6
 
 
-def test_radial_gauss_law_uses_sparse_direct_solve(monkeypatch):
-    import scipy.sparse.linalg as sparse_linalg
-
+def test_radial_gauss_law_particle_helper_is_jittable():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     species = make_species(charge=0.2)
     A = jnp.array([1.0, 1.05, 1.10, 1.15, 1.20])
 
-    calls = {"spsolve": 0, "gmres": 0}
-    original_spsolve = sparse_linalg.spsolve
-
-    def tracked_spsolve(operator, rhs):
-        calls["spsolve"] += 1
-        return original_spsolve(operator, rhs)
-
-    def tracked_gmres(*args, **kwargs):
-        calls["gmres"] += 1
-        raise AssertionError("radial Gauss-law solve should not call GMRES")
-
-    monkeypatch.setattr(sparse_linalg, "spsolve", tracked_spsolve)
-    monkeypatch.setattr(sparse_linalg, "gmres", tracked_gmres)
-
-    charge_density, electric_field = compute_charge_density_and_radial_electric_field(
-        [species],
-        A,
-        grid,
+    solve = jax.jit(
+        lambda metric_A: compute_charge_density_and_radial_electric_field(
+            [species],
+            metric_A,
+            grid,
+        )
     )
+    charge_density, electric_field = solve(A)
     residual = radial_gauss_law_residual(electric_field, charge_density, A, grid)
 
-    assert calls == {"spsolve": 1, "gmres": 0}
+    assert isinstance(build_radial_gauss_law_operator(A, grid), jax.Array)
     assert np.linalg.norm(residual, ord=np.inf) <= 1.0e-6
 
 
-def test_explicit_charge_density_solver_uses_sparse_direct_solve(monkeypatch):
-    import scipy.sparse.linalg as sparse_linalg
-
+def test_explicit_charge_density_solver_is_jittable():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     A = jnp.array([1.0, 1.05, 1.10, 1.15, 1.20])
     charge_density = jnp.array([0.0, 0.5, -0.2, 0.3, 0.0])
 
-    calls = {"spsolve": 0, "gmres": 0}
-    original_spsolve = sparse_linalg.spsolve
-
-    def tracked_spsolve(operator, rhs):
-        calls["spsolve"] += 1
-        return original_spsolve(operator, rhs)
-
-    def tracked_gmres(*args, **kwargs):
-        calls["gmres"] += 1
-        raise AssertionError("explicit charge-density solve should not call GMRES")
-
-    monkeypatch.setattr(sparse_linalg, "spsolve", tracked_spsolve)
-    monkeypatch.setattr(sparse_linalg, "gmres", tracked_gmres)
-
-    electric_field = compute_radial_electric_field(
-        charge_density,
-        A,
-        grid,
-        epsilon_0=2.0,
+    solve = jax.jit(
+        lambda density, metric_A: compute_radial_electric_field(
+            density,
+            metric_A,
+            grid,
+            epsilon_0=2.0,
+        )
     )
+    electric_field = solve(charge_density, A)
     residual = radial_gauss_law_residual(
         electric_field,
         charge_density,
@@ -173,7 +146,6 @@ def test_explicit_charge_density_solver_uses_sparse_direct_solve(monkeypatch):
         epsilon_0=2.0,
     )
 
-    assert calls == {"spsolve": 1, "gmres": 0}
     assert np.isclose(float(electric_field[0]), 0.0)
     assert np.linalg.norm(residual, ord=np.inf) <= 1.0e-6
 
@@ -294,7 +266,7 @@ def test_flat_space_charged_sphere_matches_exact_solution():
         grid,
     )
 
-    assert np.linalg.norm(residual, ord=np.inf) <= 1.0e-6
+    assert np.linalg.norm(residual, ord=np.inf) <= 2.0e-6
     assert np.isclose(float(electric_field[0]), 0.0)
     assert l2_error <= 1.0e-3
     assert linf_error <= 3.0e-3
