@@ -5,10 +5,12 @@ import jax.numpy as jnp
 
 from RadiShPICR.deposition import (
     compute_mass_density,
+    last_shape_support_index,
+)
+from RadiShPICR.deposition.number_density import (
     compute_number_density,
     compute_number_density_metric_derivative,
     compute_number_density_metric_jacobian,
-    last_shape_support_index,
 )
 from RadiShPICR.relativity.schwarzschild import schwarzschild_A, schwarzschild_u
 from RadiShPICR.relativity.utils import (

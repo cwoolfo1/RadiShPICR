@@ -6,7 +6,7 @@ from RadiShPICR.deposition import compute_mass_density
 from RadiShPICR.deposition.particle_shapes import last_shape_support_index
 from RadiShPICR.relativity.A import solve_metric_A
 from RadiShPICR.relativity.curvature import compute_extrinsic_curvature
-from RadiShPICR.relativity.energy_momentum import compute_Sr, compute_Srr
+from RadiShPICR.relativity.energy_momentum_tensor import compute_Sr, compute_Srr
 from RadiShPICR.relativity.lapse import compute_lapse
 from RadiShPICR.relativity.schwarzschild import schwarzschild_A
 from RadiShPICR.relativity.shift import compute_shift

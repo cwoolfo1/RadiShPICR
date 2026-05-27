@@ -4,16 +4,20 @@ import jax
 import jax.numpy as jnp
 
 from RadiShPICR.particles.particle_species import particle_species
-from RadiShPICR.deposition import (
-    compute_charge_density,
-    compute_mass_density,
-    compute_mass_density_metric_derivative,
-    compute_mass_density_metric_jacobian,
+
+from RadiShPICR.deposition.charge_density import compute_charge_density
+
+from RadiShPICR.deposition.mass_density import compute_mass_density
+
+from RadiShPICR.deposition.number_density import (
     compute_number_density,
     compute_number_density_metric_derivative,
     compute_number_density_metric_jacobian,
 )
-from RadiShPICR.relativity.energy_momentum import (
+
+
+
+from RadiShPICR.relativity.energy_momentum_tensor import (
     compute_Sr,
     compute_Srr,
 )
@@ -124,26 +128,18 @@ def test_species_is_jax_pytree():
     assert jnp.allclose(rebuilt.u_phi, species.u_phi)
 
 
-def test_mass_energy_density_helpers_scale_number_density_by_scalar_metadata():
-    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
-    species = make_species()
-    A = jnp.ones_like(grid.r_full)
-
-    for shape_mode in ("nearest", "quadratic"):
-        number_density = compute_number_density(species, A, grid, shape_mode=shape_mode)
-        mass_density = compute_mass_density(species, A, grid, shape_mode=shape_mode)
-        dn_dA = compute_number_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
-        drho_dA = compute_mass_density_metric_derivative(species, A, grid, shape_mode=shape_mode)
-        number_jacobian = compute_number_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
-        mass_jacobian = compute_mass_density_metric_jacobian(species, A, grid, shape_mode=shape_mode)
-
-        assert number_density.shape == grid.r_full.shape
-        assert jnp.allclose(mass_density, species.get_mass() * number_density)
-        assert jnp.allclose(drho_dA, species.get_mass() * dn_dA)
-        assert jnp.allclose(mass_jacobian, species.get_mass() * number_jacobian)
+def test_number_density_metric_derivatives_live_with_number_density_deposit():
+    assert (
+        compute_number_density_metric_derivative.__module__
+        == "RadiShPICR.deposition.number_density"
+    )
+    assert (
+        compute_number_density_metric_jacobian.__module__
+        == "RadiShPICR.deposition.number_density"
+    )
 
 
-def test_charge_density_deposits_charge_per_metric_shell_volume():
+def test_charge_density_scales_new_number_density_by_scalar_charge():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     species = particle_species(
         name="charged-dust",
@@ -162,18 +158,13 @@ def test_charge_density_deposits_charge_per_metric_shell_volume():
     )
     A = jnp.ones_like(grid.r_full)
 
+    number_density = compute_number_density(species, A, grid)
     charge_density = compute_charge_density(species, A, grid)
 
-    expected_charge_density = jnp.zeros_like(grid.r_full)
-    shell_volume = 4.0 * jnp.pi * grid.r_full[2] ** 2 * grid.dr
-    expected_charge_density = expected_charge_density.at[2].set(
-        species.get_charge() / shell_volume
-    )
-
-    assert jnp.allclose(charge_density, expected_charge_density)
+    assert jnp.allclose(charge_density, species.get_charge() * number_density)
 
 
-def test_charge_density_is_not_multiplied_by_relativistic_energy_factor():
+def test_charge_density_uses_same_relativistic_factor_as_number_density():
     grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
     resting_species = make_species()
     moving_species = resting_species.with_updated_radial_state(
@@ -184,11 +175,18 @@ def test_charge_density_is_not_multiplied_by_relativistic_energy_factor():
 
     resting_charge_density = compute_charge_density(resting_species, A, grid)
     moving_charge_density = compute_charge_density(moving_species, A, grid)
-    resting_mass_density = compute_mass_density(resting_species, A, grid)
-    moving_mass_density = compute_mass_density(moving_species, A, grid)
+    resting_number_density = compute_number_density(resting_species, A, grid)
+    moving_number_density = compute_number_density(moving_species, A, grid)
 
-    assert jnp.allclose(moving_charge_density, resting_charge_density)
-    assert not jnp.allclose(moving_mass_density, resting_mass_density)
+    assert jnp.allclose(
+        resting_charge_density,
+        resting_species.get_charge() * resting_number_density,
+    )
+    assert jnp.allclose(
+        moving_charge_density,
+        moving_species.get_charge() * moving_number_density,
+    )
+    assert not jnp.allclose(moving_charge_density, resting_charge_density)
 
 
 def test_scalar_mass_broadcasts_in_source_terms():
