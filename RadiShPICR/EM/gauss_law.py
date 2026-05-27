@@ -154,3 +154,18 @@ def compute_charge_density_and_radial_electric_field(
         epsilon_0=epsilon_0,
     )
     return total_charge_density, electric_field
+
+
+def compute_dEdr(Er, rho, dlnA_dr, grid, epsilon_0=1.0):
+    """Compute the radial derivative of the electric field from Gauss law.
+
+    This is a direct evaluation of the continuum equation
+
+        dE_r/dr = rho / epsilon_0 - (2/r + d ln(A)/dr) E_r.
+
+    """
+
+    # dE_r_dr + 2/r E_r + d ln(A)/dr E_r = rho / epsilon_0
+
+    dEdr = rho / float(epsilon_0) - (2.0 / grid.r_full + dlnA_dr) * Er
+    return dEdr

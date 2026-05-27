@@ -2,6 +2,8 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
+from RadiShPICR.EM.EM_energy_momentum_tensor import compute_EM_energy_density
+from RadiShPICR.EM.gauss_law import compute_charge_density_and_radial_electric_field
 from RadiShPICR.deposition import compute_mass_density
 from RadiShPICR.deposition.particle_shapes import last_shape_support_index
 from RadiShPICR.relativity.A import solve_metric_A
@@ -69,7 +71,14 @@ def compute_metric(
             f"Last residual: {residual}"
         )
 
-    rho = compute_mass_density(particles, A, grid, shape_mode=shape_mode)
+    particle_rho = compute_mass_density(particles, A, grid, shape_mode=shape_mode)
+    _, electric_field = compute_charge_density_and_radial_electric_field(
+        [particles],
+        A,
+        grid,
+        shape_mode=shape_mode,
+    )
+    rho = particle_rho + compute_EM_energy_density(electric_field)
     S_r = compute_Sr(particles, A, grid, shape_mode=shape_mode)
     S_rr = compute_Srr(particles, A, grid, shape_mode=shape_mode)
 
