@@ -50,5 +50,5 @@ def compute_radial_lorentz_force_terms(
     )
 
     return LorentzForceTerms(
-        du_r_dt=lapse_at_particle * charge_to_mass * electric_field_at_particle,
+        du_r_dt= charge_to_mass * electric_field_at_particle,
     )
