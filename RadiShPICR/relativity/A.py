@@ -21,6 +21,12 @@ from RadiShPICR.relativity.utils import (
 )
 
 
+def _particle_list(particles):
+    if isinstance(particles, (list, tuple)):
+        return particles
+    return [particles]
+
+
 def nonlinear_residual_u( U, source_term, grid, boundary_u, exact_exterior_points ):
     """Residual for the nonlinear polar-gauge ``U = sqrt(A)`` equation.
 
@@ -97,12 +103,20 @@ def build_dense_operator( radial_grid, dr, jacobian_diagonal, exact_exterior_poi
 def metric_mass_energy_density_from_U(particles, U, grid, shape_mode="nearest"):
     """Compute the particle plus EM mass-energy density for the A equation."""
     A = U**2
-    number_density = compute_number_density(particles, A, grid, shape_mode=shape_mode)
-    particle_mass = particles.get_mass()
-    particle_rho = particle_mass * number_density
+    species_list = _particle_list(particles)
+
+    particle_rho = jnp.zeros_like(grid.r_full)
+    for species in species_list:
+        number_density = compute_number_density(
+            species,
+            A,
+            grid,
+            shape_mode=shape_mode,
+        )
+        particle_rho = particle_rho + species.get_mass() * number_density
 
     _, electric_field = compute_charge_density_and_radial_electric_field(
-        [particles],
+        species_list,
         A,
         grid,
         shape_mode=shape_mode,
@@ -169,7 +183,19 @@ def solve_metric_A(
     shape_mode="nearest",
 ):
 
-    last_index = last_shape_support_index(particles.r, grid, shape_mode=shape_mode)
+    species_list = _particle_list(particles)
+    last_index = last_shape_support_index(
+        species_list[0].r,
+        grid,
+        shape_mode=shape_mode,
+    )
+    for species in species_list[1:]:
+        species_last_index = last_shape_support_index(
+            species.r,
+            grid,
+            shape_mode=shape_mode,
+        )
+        last_index = jnp.maximum(last_index, species_last_index)
     # get the outermost grid index touched by the particle deposition support.
 
     grid_index = jnp.arange(grid.r_full.shape[0], dtype=last_index.dtype)

@@ -47,6 +47,26 @@ def make_species():
     )
 
 
+def make_second_species():
+    return particle_species(
+        name="electrons",
+        number_of_particles=3,
+        charge=-1.0,
+        mass=1.0,
+        temperature=0.0,
+        r=jnp.array([0.20, 0.45, 0.70]),
+        phi=jnp.array([0.0, 0.2, 0.4]),
+        u_r=jnp.array([-0.04, 0.01, 0.02]),
+        u_phi=jnp.array([0.1, 0.2, 0.3]),
+        weight=2.0,
+        r_min=0.0,
+        r_max=1.0,
+        dr=0.25,
+        shape=2,
+        dt=0.01,
+    )
+
+
 def test_species_stores_spherical_state_and_scalar_metadata():
     species = make_species()
 
@@ -357,6 +377,71 @@ def test_compute_metric_reports_electromagnetic_energy_density_in_rho(monkeypatc
     assert jnp.allclose(metric.rho, expected_rho)
 
 
+def test_compute_metric_sums_particle_and_em_sources_for_species_list(monkeypatch):
+    import RadiShPICR.relativity.metric as metric_module
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    ions = make_species()
+    electrons = make_second_species()
+    particles = [ions, electrons]
+    solved_A = jnp.ones_like(grid.r_full)
+    electric_field = jnp.array([0.0, 0.2, 0.4, 0.6, 0.0])
+
+    def fake_solve_metric_A(
+        particle_list,
+        metric_grid,
+        schwarzschild_mass,
+        initial_A_guess,
+        shape_mode="nearest",
+    ):
+        assert particle_list == particles
+        return solved_A, True, 0.0
+
+    def fake_charge_density_and_field(
+        particle_list,
+        metric_A,
+        solve_grid,
+        shape_mode="nearest",
+    ):
+        assert particle_list == particles
+        assert jnp.allclose(metric_A, solved_A)
+        assert solve_grid is grid
+        return jnp.zeros_like(grid.r_full), electric_field
+
+    monkeypatch.setattr(metric_module, "solve_metric_A", fake_solve_metric_A)
+    monkeypatch.setattr(
+        metric_module,
+        "compute_charge_density_and_radial_electric_field",
+        fake_charge_density_and_field,
+    )
+
+    metric = compute_metric(
+        particles,
+        grid,
+        schwarzschild_mass=0.0,
+        initial_A_guess=solved_A,
+    )
+
+    expected_rho = (
+        compute_mass_density(ions, solved_A, grid)
+        + compute_mass_density(electrons, solved_A, grid)
+        + 0.5 * electric_field**2
+    )
+    expected_Sr = compute_Sr(ions, solved_A, grid) + compute_Sr(electrons, solved_A, grid)
+    expected_Srr = (
+        compute_Srr(ions, solved_A, grid)
+        + compute_Srr(electrons, solved_A, grid)
+        + 0.5 * solved_A**2 * electric_field**2
+    )
+    expected_rho = jnp.where(metric.exact_exterior_points, 0.0, expected_rho)
+    expected_Sr = jnp.where(metric.exact_exterior_points, 0.0, expected_Sr)
+    expected_Srr = jnp.where(metric.exact_exterior_points, 0.0, expected_Srr)
+
+    assert jnp.allclose(metric.rho, expected_rho)
+    assert jnp.allclose(metric.S_r, expected_Sr)
+    assert jnp.allclose(metric.S_rr, expected_Srr)
+
+
 def test_compute_metric_reports_electromagnetic_stress_in_Srr(monkeypatch):
     import RadiShPICR.relativity.metric as metric_module
 
@@ -493,6 +578,85 @@ def test_rk4_step_preserves_constrained_momenta_with_new_species():
     rk4_particles = rk4_step(species, fields, grid, dt=0.01, schwarzschild_mass=0.0)
 
     assert jnp.allclose(rk4_particles.u_phi, species.u_phi)
+
+
+def test_rk4_step_has_no_separate_species_list_stepper():
+    import RadiShPICR.evolve as evolve
+
+    assert not hasattr(evolve, "_rk4_step_particle_list")
+
+
+def test_rk4_step_advances_species_list_with_whole_list_charge_source(monkeypatch):
+    import RadiShPICR.evolve as evolve
+    from RadiShPICR.EM.lorentz_force import LorentzForceTerms
+    from RadiShPICR.relativity.geodesic import GeodesicTerms
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    ions = make_species()
+    electrons = make_second_species()
+    particles = [ions, electrons]
+    fields = MetricState(
+        rho=jnp.zeros_like(grid.r_full),
+        A=jnp.ones_like(grid.r_full),
+        lapse=jnp.ones_like(grid.r_full),
+        shift=jnp.zeros_like(grid.r_full),
+        extrinsic_curvature=jnp.zeros_like(grid.r_full),
+        S_r=jnp.zeros_like(grid.r_full),
+        S_rr=jnp.zeros_like(grid.r_full),
+        exact_exterior_points=jnp.ones_like(grid.r_full, dtype=bool),
+    )
+    electric_field_calls = []
+
+    def fake_compute_geodesic_terms(
+        stage_species,
+        metric,
+        metric_grid,
+        schwarzschild_mass,
+        shape_mode="nearest",
+    ):
+        return GeodesicTerms(
+            dr_dt=stage_species.r,
+            dphi_dt=jnp.zeros_like(stage_species.r),
+            du_r_dt=jnp.zeros_like(stage_species.r),
+        )
+
+    def fake_compute_radial_lorentz_force_terms(
+        stage_species,
+        metric,
+        metric_grid,
+        electric_field,
+        shape_mode="nearest",
+    ):
+        return LorentzForceTerms(du_r_dt=jnp.zeros_like(stage_species.r))
+
+    def fake_solve(particle_list, A, solve_grid, shape_mode="nearest"):
+        electric_field_calls.append(tuple(species.get_name() for species in particle_list))
+        return jnp.zeros_like(solve_grid.r_full), jnp.zeros_like(solve_grid.r_full)
+
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_compute_geodesic_terms)
+    monkeypatch.setattr(
+        evolve,
+        "compute_radial_lorentz_force_terms",
+        fake_compute_radial_lorentz_force_terms,
+    )
+    monkeypatch.setattr(
+        evolve,
+        "compute_charge_density_and_radial_electric_field",
+        fake_solve,
+    )
+
+    updated_particles = rk4_step(
+        particles,
+        fields,
+        grid,
+        dt=0.2,
+        schwarzschild_mass=0.0,
+    )
+
+    assert isinstance(updated_particles, list)
+    assert [species.get_name() for species in updated_particles] == ["ions", "electrons"]
+    assert len(electric_field_calls) == 8
+    assert all(call == ("ions", "electrons") for call in electric_field_calls)
 
 
 def test_rk4_step_recomputes_electric_field_for_each_stage(monkeypatch):
@@ -658,6 +822,103 @@ def test_advance_one_step_recomputes_metric_and_electric_field_for_dynamic_rk4(m
         expected_stage_radius_means,
     )
     assert jnp.allclose(returned_fields.A, expected_final_radius_mean)
+
+
+def test_advance_one_step_advances_species_list_with_shared_stage_fields(monkeypatch):
+    import RadiShPICR.evolve as evolve
+    from RadiShPICR.EM.lorentz_force import LorentzForceTerms
+    from RadiShPICR.relativity.geodesic import GeodesicTerms
+
+    grid = build_radial_grid(epsilon=0.05, r_max=1.0, num_interior_points=5)
+    ions = make_species()
+    electrons = make_second_species()
+    particles = [ions, electrons]
+    metric_calls = []
+    electric_field_calls = []
+
+    def collection_radius_mean(stage_particles):
+        return jnp.mean(jnp.concatenate([species.r for species in stage_particles]))
+
+    def fake_compute_metric(
+        stage_particles,
+        metric_grid,
+        schwarzschild_mass,
+        initial_A_guess=None,
+        shape_mode="nearest",
+    ):
+        stage_radius_mean = collection_radius_mean(stage_particles)
+        metric_calls.append(stage_radius_mean)
+        stage_A = jnp.full_like(metric_grid.r_full, stage_radius_mean)
+
+        return MetricState(
+            rho=jnp.zeros_like(metric_grid.r_full),
+            A=stage_A,
+            lapse=jnp.ones_like(metric_grid.r_full),
+            shift=jnp.zeros_like(metric_grid.r_full),
+            extrinsic_curvature=jnp.zeros_like(metric_grid.r_full),
+            S_r=jnp.zeros_like(metric_grid.r_full),
+            S_rr=jnp.zeros_like(metric_grid.r_full),
+            exact_exterior_points=jnp.ones_like(metric_grid.r_full, dtype=bool),
+        )
+
+    def fake_compute_geodesic_terms(
+        stage_species,
+        metric,
+        metric_grid,
+        schwarzschild_mass,
+        shape_mode="nearest",
+    ):
+        return GeodesicTerms(
+            dr_dt=stage_species.r,
+            dphi_dt=jnp.zeros_like(stage_species.r),
+            du_r_dt=jnp.zeros_like(stage_species.r),
+        )
+
+    def fake_compute_radial_lorentz_force_terms(
+        stage_species,
+        metric,
+        metric_grid,
+        electric_field,
+        shape_mode="nearest",
+    ):
+        return LorentzForceTerms(du_r_dt=jnp.zeros_like(stage_species.r))
+
+    def fake_solve(particle_list, A, solve_grid, shape_mode="nearest"):
+        electric_field_calls.append(
+            (
+                tuple(species.get_name() for species in particle_list),
+                collection_radius_mean(particle_list),
+                A[0],
+            )
+        )
+        return jnp.zeros_like(solve_grid.r_full), jnp.zeros_like(solve_grid.r_full)
+
+    monkeypatch.setattr(evolve, "compute_metric", fake_compute_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_compute_geodesic_terms)
+    monkeypatch.setattr(
+        evolve,
+        "compute_radial_lorentz_force_terms",
+        fake_compute_radial_lorentz_force_terms,
+    )
+    monkeypatch.setattr(
+        evolve,
+        "compute_charge_density_and_radial_electric_field",
+        fake_solve,
+    )
+
+    updated_particles, returned_fields = advance_one_step(
+        particles,
+        grid,
+        dt=0.2,
+        schwarzschild_mass=0.0,
+    )
+
+    assert isinstance(updated_particles, list)
+    assert [species.get_name() for species in updated_particles] == ["ions", "electrons"]
+    assert len(metric_calls) == 8
+    assert len(electric_field_calls) == 8
+    assert all(call[0] == ("ions", "electrons") for call in electric_field_calls)
+    assert jnp.allclose(returned_fields.A, collection_radius_mean(updated_particles))
 
 
 def test_advance_one_step_is_rk4_only_api():

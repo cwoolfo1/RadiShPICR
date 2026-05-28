@@ -28,6 +28,12 @@ class MetricState(NamedTuple):
     exact_exterior_points: jnp.ndarray
 
 
+def _particle_list(particles):
+    if isinstance(particles, (list, tuple)):
+        return particles
+    return [particles]
+
+
 def compute_metric(
     particles,
     grid,
@@ -37,7 +43,19 @@ def compute_metric(
 ):
     """Solve the metric fields sourced by the current particle distribution."""
 
-    last_matter_index = last_shape_support_index(particles.r, grid, shape_mode=shape_mode)
+    species_list = _particle_list(particles)
+    last_matter_index = last_shape_support_index(
+        species_list[0].r,
+        grid,
+        shape_mode=shape_mode,
+    )
+    for species in species_list[1:]:
+        species_last_matter_index = last_shape_support_index(
+            species.r,
+            grid,
+            shape_mode=shape_mode,
+        )
+        last_matter_index = jnp.maximum(last_matter_index, species_last_matter_index)
     exact_exterior_points = exact_exterior_points_from_last_matter_index(
         last_matter_index,
         grid,
@@ -71,16 +89,27 @@ def compute_metric(
             f"Last residual: {residual}"
         )
 
-    particle_rho = compute_mass_density(particles, A, grid, shape_mode=shape_mode)
+    particle_rho = jnp.zeros_like(grid.r_full)
+    for species in species_list:
+        particle_rho = particle_rho + compute_mass_density(
+            species,
+            A,
+            grid,
+            shape_mode=shape_mode,
+        )
+
     _, electric_field = compute_charge_density_and_radial_electric_field(
-        [particles],
+        species_list,
         A,
         grid,
         shape_mode=shape_mode,
     )
     rho = particle_rho + compute_EM_energy_density(electric_field)
-    S_r = compute_Sr(particles, A, grid, shape_mode=shape_mode)
-    S_rr = compute_Srr(particles, A, grid, shape_mode=shape_mode)
+    S_r = jnp.zeros_like(grid.r_full)
+    S_rr = jnp.zeros_like(grid.r_full)
+    for species in species_list:
+        S_r = S_r + compute_Sr(species, A, grid, shape_mode=shape_mode)
+        S_rr = S_rr + compute_Srr(species, A, grid, shape_mode=shape_mode)
     S_rr = S_rr + compute_EM_stress(electric_field, A)
 
     # Birkhoff's theorem fixes the discrete exterior to the vacuum solution.

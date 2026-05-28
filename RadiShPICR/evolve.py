@@ -9,12 +9,37 @@ from RadiShPICR.relativity.geodesic import compute_geodesic_terms
 from RadiShPICR.relativity.metric import compute_metric
 
 
+def _particle_list(particles):
+    if isinstance(particles, (list, tuple)):
+        return list(particles)
+    return [particles]
+
+
+def _restore_particle_structure(original_particles, updated_particle_list):
+    if isinstance(original_particles, tuple):
+        return tuple(updated_particle_list)
+    if isinstance(original_particles, list):
+        return updated_particle_list
+    return updated_particle_list[0]
+
+
+def _source_particles_at_stage(source_particles, source_particle_index, stage_particles):
+    if source_particles is None:
+        return None
+
+    staged_source_particles = list(source_particles)
+    staged_source_particles[source_particle_index] = stage_particles
+    return staged_source_particles
+
+
 def _compute_particle_derivatives(
     particles,
     fields,
     grid,
     schwarzschild_mass,
     shape_mode="nearest",
+    source_particles=None,
+    electric_field=None,
 ):
     geodesic_terms = compute_geodesic_terms(
         particles,
@@ -23,12 +48,15 @@ def _compute_particle_derivatives(
         schwarzschild_mass,
         shape_mode=shape_mode,
     )
-    _, electric_field = compute_charge_density_and_radial_electric_field(
-        [particles],
-        fields.A,
-        grid,
-        shape_mode=shape_mode,
-    )
+    if electric_field is None:
+        if source_particles is None:
+            source_particles = [particles]
+        _, electric_field = compute_charge_density_and_radial_electric_field(
+            _particle_list(source_particles),
+            fields.A,
+            grid,
+            shape_mode=shape_mode,
+        )
     lorentz_terms = compute_radial_lorentz_force_terms(
         particles,
         fields,
@@ -42,7 +70,7 @@ def _compute_particle_derivatives(
     )
 
 
-def rk4_step(
+def _rk4_step_one_species(
     particles,
     fields,
     grid,
@@ -50,8 +78,13 @@ def rk4_step(
     schwarzschild_mass,
     shape_mode="nearest",
     recompute_metric_each_stage=False,
+    source_particles=None,
+    source_particle_index=None,
 ):
     dt_value = jnp.asarray(dt, dtype=particles.r.dtype)
+    if source_particles is None:
+        source_particles = [particles]
+        source_particle_index = 0
 
     k1 = _compute_particle_derivatives(
         particles,
@@ -59,6 +92,7 @@ def rk4_step(
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
+        source_particles=source_particles,
     )
     state_k2 = particles.with_updated_orbital_state(
         particles.r + 0.5 * dt_value * k1.dr_dt,
@@ -68,8 +102,13 @@ def rk4_step(
     # Dynamic runs solve the metric constraint at each RK stage state before
     # depositing charge and solving Gauss law for that same stage.
     if recompute_metric_each_stage:
-        fields_k2 = compute_metric(
+        source_k2 = _source_particles_at_stage(
+            source_particles,
+            source_particle_index,
             state_k2,
+        )
+        fields_k2 = compute_metric(
+            source_k2,
             grid,
             schwarzschild_mass,
             initial_A_guess=fields.A,
@@ -84,6 +123,11 @@ def rk4_step(
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
+        source_particles=_source_particles_at_stage(
+            source_particles,
+            source_particle_index,
+            state_k2,
+        ),
     )
     state_k3 = particles.with_updated_orbital_state(
         particles.r + 0.5 * dt_value * k2.dr_dt,
@@ -91,8 +135,13 @@ def rk4_step(
         particles.u_r + 0.5 * dt_value * k2.du_r_dt,
     )
     if recompute_metric_each_stage:
-        fields_k3 = compute_metric(
+        source_k3 = _source_particles_at_stage(
+            source_particles,
+            source_particle_index,
             state_k3,
+        )
+        fields_k3 = compute_metric(
+            source_k3,
             grid,
             schwarzschild_mass,
             initial_A_guess=fields_k2.A,
@@ -107,6 +156,11 @@ def rk4_step(
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
+        source_particles=_source_particles_at_stage(
+            source_particles,
+            source_particle_index,
+            state_k3,
+        ),
     )
     state_k4 = particles.with_updated_orbital_state(
         particles.r + dt_value * k3.dr_dt,
@@ -114,8 +168,13 @@ def rk4_step(
         particles.u_r + dt_value * k3.du_r_dt,
     )
     if recompute_metric_each_stage:
-        fields_k4 = compute_metric(
+        source_k4 = _source_particles_at_stage(
+            source_particles,
+            source_particle_index,
             state_k4,
+        )
+        fields_k4 = compute_metric(
+            source_k4,
             grid,
             schwarzschild_mass,
             initial_A_guess=fields_k3.A,
@@ -130,6 +189,11 @@ def rk4_step(
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
+        source_particles=_source_particles_at_stage(
+            source_particles,
+            source_particle_index,
+            state_k4,
+        ),
     )
 
     updated_r = particles.r + (dt_value / 6.0) * (
@@ -143,6 +207,45 @@ def rk4_step(
     )
 
     return particles.with_updated_orbital_state(updated_r, updated_phi, updated_u_r)
+
+
+def rk4_step(
+    particles,
+    fields,
+    grid,
+    dt,
+    schwarzschild_mass,
+    shape_mode="nearest",
+    recompute_metric_each_stage=False,
+):
+    if isinstance(particles, (list, tuple)):
+        particle_list = _particle_list(particles)
+        updated_particle_list = []
+        for species_index, species in enumerate(particle_list):
+            updated_particle_list.append(
+                _rk4_step_one_species(
+                    species,
+                    fields,
+                    grid,
+                    dt,
+                    schwarzschild_mass,
+                    shape_mode=shape_mode,
+                    recompute_metric_each_stage=recompute_metric_each_stage,
+                    source_particles=particle_list,
+                    source_particle_index=species_index,
+                )
+            )
+        return _restore_particle_structure(particles, updated_particle_list)
+
+    return _rk4_step_one_species(
+        particles,
+        fields,
+        grid,
+        dt,
+        schwarzschild_mass,
+        shape_mode=shape_mode,
+        recompute_metric_each_stage=recompute_metric_each_stage,
+    )
 
 
 def advance_one_step(
