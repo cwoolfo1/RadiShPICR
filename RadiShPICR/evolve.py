@@ -5,7 +5,7 @@ from RadiShPICR.EM import (
     compute_radial_lorentz_force_terms,
 )
 from RadiShPICR.relativity.A import euler_step_A
-from RadiShPICR.relativity.geodesic import compute_geodesic_terms
+from RadiShPICR.relativity.geodesic import compute_geodesic_terms, GeodesicTerms
 from RadiShPICR.relativity.metric import compute_metric
 
 
@@ -40,34 +40,56 @@ def _compute_particle_derivatives(
     shape_mode="nearest",
     source_particles=None,
     electric_field=None,
+    GR = True,
+    EM = True,
 ):
-    geodesic_terms = compute_geodesic_terms(
-        particles,
-        fields,
-        grid,
-        schwarzschild_mass,
-        shape_mode=shape_mode,
+    
+    u_r, u_phi = particles.get_velocity()
+    zeros = jnp.zeros_like(u_r)
+    geodesic_terms = GeodesicTerms(
+        dr_dt=zeros,
+        dphi_dt=zeros,
+        du_r_dt=zeros,
     )
-    if electric_field is None:
-        if source_particles is None:
-            source_particles = [particles]
-        _, electric_field = compute_charge_density_and_radial_electric_field(
-            _particle_list(source_particles),
-            fields.A,
+    # initialize empty tuple
+
+    if GR:
+        geodesic_terms = compute_geodesic_terms(
+            particles,
+            fields,
             grid,
+            schwarzschild_mass,
             shape_mode=shape_mode,
         )
-    lorentz_terms = compute_radial_lorentz_force_terms(
-        particles,
-        fields,
-        grid,
-        electric_field,
-        shape_mode=shape_mode,
-    )
+        # compute the geodesic terms for the particle derivatives
 
-    return geodesic_terms._replace(
-        du_r_dt=geodesic_terms.du_r_dt + lorentz_terms.du_r_dt,
-    )
+
+    if EM:
+        if electric_field is None:
+            if source_particles is None:
+                source_particles = [particles]
+            _, electric_field = compute_charge_density_and_radial_electric_field(
+                _particle_list(source_particles),
+                fields.A,
+                grid,
+                shape_mode=shape_mode,
+            )
+        
+        lorentz_terms = compute_radial_lorentz_force_terms(
+            particles,
+            fields,
+            grid,
+            electric_field,
+            shape_mode=shape_mode,
+        )
+        # if EM contributions are included, compute the Lorentz force terms
+
+        geodesic_terms = geodesic_terms._replace(
+            du_r_dt=geodesic_terms.du_r_dt + lorentz_terms.du_r_dt,
+        )
+        # update the geodesic terms to include the Lorentz force contributions to du_r_dt
+
+    return geodesic_terms
 
 
 def _rk4_step_one_species(

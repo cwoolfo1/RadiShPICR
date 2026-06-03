@@ -325,6 +325,34 @@ def test_solve_metric_A_is_jitted_for_zero_source():
     assert jnp.allclose(solved_A, initial_A)
 
 
+def test_A_solver_linear_correction_falls_back_when_gmres_residual_fails(monkeypatch):
+    import RadiShPICR.relativity.A as A_solver
+
+    jacobian_matrix = jnp.array(
+        [
+            [4.0, 1.0, 0.0],
+            [1.0, 3.0, 1.0],
+            [0.0, 1.0, 2.0],
+        ]
+    )
+    residual = jnp.array([1.0, -2.0, 0.5])
+
+    def failed_gmres(operator, rhs, **kwargs):
+        return jnp.zeros_like(rhs), None
+
+    monkeypatch.setattr(A_solver, "gmres", failed_gmres)
+
+    delta_U, gmres_converged = A_solver.solve_newton_linear_correction(
+        jacobian_matrix,
+        residual,
+    )
+
+    expected_delta_U = jnp.linalg.solve(jacobian_matrix, -residual)
+
+    assert not bool(gmres_converged)
+    assert jnp.allclose(delta_U, expected_delta_U)
+
+
 def test_compute_metric_reports_electromagnetic_energy_density_in_rho(monkeypatch):
     import RadiShPICR.relativity.metric as metric_module
 
