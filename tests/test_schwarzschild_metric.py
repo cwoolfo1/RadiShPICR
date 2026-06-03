@@ -95,10 +95,10 @@ def test_static_schwarzschild_circular_geodesic_has_stationary_radius():
         azimuthal_momentum=jnp.sqrt(angular_momentum_squared),
     )
 
-    derivatives = compute_geodesic_terms(particles, metric, grid, mass)
+    dr_dt, _, du_r_dt = compute_geodesic_terms(particles, metric, grid, mass)
 
-    assert jnp.allclose(derivatives.dr_dt, 0.0, atol=1.0e-10)
-    assert jnp.allclose(derivatives.du_r_dt, 0.0, atol=1.0e-5)
+    assert jnp.allclose(dr_dt, 0.0, atol=1.0e-10)
+    assert jnp.allclose(du_r_dt, 0.0, atol=1.0e-5)
 
 
 def test_static_metric_particle_step_preserves_azimuthal_momentum():

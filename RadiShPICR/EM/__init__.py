@@ -4,12 +4,10 @@ from .gauss_law import (
     compute_radial_electric_field,
 )
 from .lorentz_force import (
-    LorentzForceTerms,
     compute_radial_lorentz_force_terms,
 )
 
 __all__ = [
-    "LorentzForceTerms",
     "build_radial_gauss_law_operator",
     "compute_charge_density_and_radial_electric_field",
     "compute_radial_electric_field",

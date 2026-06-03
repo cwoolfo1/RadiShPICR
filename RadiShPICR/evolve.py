@@ -5,8 +5,8 @@ from RadiShPICR.EM import (
     compute_radial_lorentz_force_terms,
 )
 from RadiShPICR.relativity.A import euler_step_A
-from RadiShPICR.relativity.geodesic import compute_geodesic_terms, GeodesicTerms
-from RadiShPICR.relativity.metric import compute_metric
+from RadiShPICR.relativity.geodesic import compute_geodesic_terms
+from RadiShPICR.relativity.metric import MetricState, compute_metric
 
 
 def _particle_list(particles):
@@ -32,6 +32,22 @@ def _source_particles_at_stage(source_particles, source_particle_index, stage_pa
     return staged_source_particles
 
 
+def _flat_metric_state(grid):
+    zeros = jnp.zeros_like(grid.r_full)
+    ones = jnp.ones_like(grid.r_full)
+
+    return MetricState(
+        rho=zeros,
+        A=ones,
+        lapse=ones,
+        shift=zeros,
+        extrinsic_curvature=zeros,
+        S_r=zeros,
+        S_rr=zeros,
+        exact_exterior_points=jnp.ones_like(grid.r_full, dtype=bool),
+    )
+
+
 def _compute_particle_derivatives(
     particles,
     fields,
@@ -40,29 +56,29 @@ def _compute_particle_derivatives(
     shape_mode="nearest",
     source_particles=None,
     electric_field=None,
-    GR = True,
-    EM = True,
+    GR=True,
+    EM=True,
 ):
-    
-    u_r, u_phi = particles.get_velocity()
+
+    u_r, _ = particles.get_velocity()
     zeros = jnp.zeros_like(u_r)
-    geodesic_terms = GeodesicTerms(
-        dr_dt=zeros,
-        dphi_dt=zeros,
-        du_r_dt=zeros,
+    fields_for_motion = fields
+    mass_for_motion = schwarzschild_mass
+
+    if not GR:
+        fields_for_motion = _flat_metric_state(grid)
+        mass_for_motion = 0.0
+        # GR=False keeps the particle orbit equations, but evaluates them in
+        # flat space so Schwarzschild boundary derivatives do not enter.
+
+    dr_dt, dphi_dt, du_r_dt = compute_geodesic_terms(
+        particles,
+        fields_for_motion,
+        grid,
+        mass_for_motion,
+        shape_mode=shape_mode,
     )
-    # initialize empty tuple
-
-    if GR:
-        geodesic_terms = compute_geodesic_terms(
-            particles,
-            fields,
-            grid,
-            schwarzschild_mass,
-            shape_mode=shape_mode,
-        )
-        # compute the geodesic terms for the particle derivatives
-
+    # compute the orbit derivatives for the particle update
 
     if EM:
         if electric_field is None:
@@ -70,26 +86,24 @@ def _compute_particle_derivatives(
                 source_particles = [particles]
             _, electric_field = compute_charge_density_and_radial_electric_field(
                 _particle_list(source_particles),
-                fields.A,
+                fields_for_motion.A,
                 grid,
                 shape_mode=shape_mode,
             )
         
-        lorentz_terms = compute_radial_lorentz_force_terms(
+        lorentz_du_r_dt = compute_radial_lorentz_force_terms(
             particles,
-            fields,
+            fields_for_motion,
             grid,
             electric_field,
             shape_mode=shape_mode,
         )
         # if EM contributions are included, compute the Lorentz force terms
 
-        geodesic_terms = geodesic_terms._replace(
-            du_r_dt=geodesic_terms.du_r_dt + lorentz_terms.du_r_dt,
-        )
-        # update the geodesic terms to include the Lorentz force contributions to du_r_dt
+        du_r_dt = du_r_dt + lorentz_du_r_dt
+        # add the Lorentz force contribution to the radial momentum equation
 
-    return geodesic_terms
+    return dr_dt, dphi_dt, du_r_dt
 
 
 def _rk4_step_one_species(
@@ -102,28 +116,36 @@ def _rk4_step_one_species(
     recompute_metric_each_stage=False,
     source_particles=None,
     source_particle_index=None,
+    GR=True,
+    EM=True,
 ):
     dt_value = jnp.asarray(dt, dtype=particles.r.dtype)
+    fields_for_step = fields
+    if not GR:
+        fields_for_step = _flat_metric_state(grid)
+
     if source_particles is None:
         source_particles = [particles]
         source_particle_index = 0
 
-    k1 = _compute_particle_derivatives(
+    k1_dr_dt, k1_dphi_dt, k1_du_r_dt = _compute_particle_derivatives(
         particles,
-        fields,
+        fields_for_step,
         grid,
         schwarzschild_mass,
         shape_mode=shape_mode,
         source_particles=source_particles,
+        GR=GR,
+        EM=EM,
     )
     state_k2 = particles.with_updated_orbital_state(
-        particles.r + 0.5 * dt_value * k1.dr_dt,
-        particles.phi + 0.5 * dt_value * k1.dphi_dt,
-        particles.u_r + 0.5 * dt_value * k1.du_r_dt,
+        particles.r + 0.5 * dt_value * k1_dr_dt,
+        particles.phi + 0.5 * dt_value * k1_dphi_dt,
+        particles.u_r + 0.5 * dt_value * k1_du_r_dt,
     )
     # Dynamic runs solve the metric constraint at each RK stage state before
     # depositing charge and solving Gauss law for that same stage.
-    if recompute_metric_each_stage:
+    if GR and recompute_metric_each_stage:
         source_k2 = _source_particles_at_stage(
             source_particles,
             source_particle_index,
@@ -133,13 +155,14 @@ def _rk4_step_one_species(
             source_k2,
             grid,
             schwarzschild_mass,
-            initial_A_guess=fields.A,
+            initial_A_guess=fields_for_step.A,
             shape_mode=shape_mode,
+            EM=EM,
         )
     else:
-        fields_k2 = fields
+        fields_k2 = fields_for_step
 
-    k2 = _compute_particle_derivatives(
+    k2_dr_dt, k2_dphi_dt, k2_du_r_dt = _compute_particle_derivatives(
         state_k2,
         fields_k2,
         grid,
@@ -150,13 +173,15 @@ def _rk4_step_one_species(
             source_particle_index,
             state_k2,
         ),
+        GR=GR,
+        EM=EM,
     )
     state_k3 = particles.with_updated_orbital_state(
-        particles.r + 0.5 * dt_value * k2.dr_dt,
-        particles.phi + 0.5 * dt_value * k2.dphi_dt,
-        particles.u_r + 0.5 * dt_value * k2.du_r_dt,
+        particles.r + 0.5 * dt_value * k2_dr_dt,
+        particles.phi + 0.5 * dt_value * k2_dphi_dt,
+        particles.u_r + 0.5 * dt_value * k2_du_r_dt,
     )
-    if recompute_metric_each_stage:
+    if GR and recompute_metric_each_stage:
         source_k3 = _source_particles_at_stage(
             source_particles,
             source_particle_index,
@@ -168,11 +193,12 @@ def _rk4_step_one_species(
             schwarzschild_mass,
             initial_A_guess=fields_k2.A,
             shape_mode=shape_mode,
+            EM=EM,
         )
     else:
-        fields_k3 = fields
+        fields_k3 = fields_for_step
 
-    k3 = _compute_particle_derivatives(
+    k3_dr_dt, k3_dphi_dt, k3_du_r_dt = _compute_particle_derivatives(
         state_k3,
         fields_k3,
         grid,
@@ -183,13 +209,15 @@ def _rk4_step_one_species(
             source_particle_index,
             state_k3,
         ),
+        GR=GR,
+        EM=EM,
     )
     state_k4 = particles.with_updated_orbital_state(
-        particles.r + dt_value * k3.dr_dt,
-        particles.phi + dt_value * k3.dphi_dt,
-        particles.u_r + dt_value * k3.du_r_dt,
+        particles.r + dt_value * k3_dr_dt,
+        particles.phi + dt_value * k3_dphi_dt,
+        particles.u_r + dt_value * k3_du_r_dt,
     )
-    if recompute_metric_each_stage:
+    if GR and recompute_metric_each_stage:
         source_k4 = _source_particles_at_stage(
             source_particles,
             source_particle_index,
@@ -201,11 +229,12 @@ def _rk4_step_one_species(
             schwarzschild_mass,
             initial_A_guess=fields_k3.A,
             shape_mode=shape_mode,
+            EM=EM,
         )
     else:
-        fields_k4 = fields
+        fields_k4 = fields_for_step
 
-    k4 = _compute_particle_derivatives(
+    k4_dr_dt, k4_dphi_dt, k4_du_r_dt = _compute_particle_derivatives(
         state_k4,
         fields_k4,
         grid,
@@ -216,16 +245,18 @@ def _rk4_step_one_species(
             source_particle_index,
             state_k4,
         ),
+        GR=GR,
+        EM=EM,
     )
 
     updated_r = particles.r + (dt_value / 6.0) * (
-        k1.dr_dt + 2.0 * k2.dr_dt + 2.0 * k3.dr_dt + k4.dr_dt
+        k1_dr_dt + 2.0 * k2_dr_dt + 2.0 * k3_dr_dt + k4_dr_dt
     )
     updated_phi = particles.phi + (dt_value / 6.0) * (
-        k1.dphi_dt + 2.0 * k2.dphi_dt + 2.0 * k3.dphi_dt + k4.dphi_dt
+        k1_dphi_dt + 2.0 * k2_dphi_dt + 2.0 * k3_dphi_dt + k4_dphi_dt
     )
     updated_u_r = particles.u_r + (dt_value / 6.0) * (
-        k1.du_r_dt + 2.0 * k2.du_r_dt + 2.0 * k3.du_r_dt + k4.du_r_dt
+        k1_du_r_dt + 2.0 * k2_du_r_dt + 2.0 * k3_du_r_dt + k4_du_r_dt
     )
 
     return particles.with_updated_orbital_state(updated_r, updated_phi, updated_u_r)
@@ -239,6 +270,8 @@ def rk4_step(
     schwarzschild_mass,
     shape_mode="nearest",
     recompute_metric_each_stage=False,
+    GR=True,
+    EM=True,
 ):
     if isinstance(particles, (list, tuple)):
         particle_list = _particle_list(particles)
@@ -255,6 +288,8 @@ def rk4_step(
                     recompute_metric_each_stage=recompute_metric_each_stage,
                     source_particles=particle_list,
                     source_particle_index=species_index,
+                    GR=GR,
+                    EM=EM,
                 )
             )
         return _restore_particle_structure(particles, updated_particle_list)
@@ -267,6 +302,8 @@ def rk4_step(
         schwarzschild_mass,
         shape_mode=shape_mode,
         recompute_metric_each_stage=recompute_metric_each_stage,
+        GR=GR,
+        EM=EM,
     )
 
 
@@ -280,13 +317,20 @@ def advance_one_step(
     fixed_fields=None,
     remove_escaped_particles=True,
     shape_mode="nearest",
+    GR=True,
+    EM=True,
 ):
-    if schwarzschild_mass is None:
+    if GR and schwarzschild_mass is None:
         raise ValueError("advance_one_step requires an explicit schwarzschild_mass.")
 
-    current_mass = float(schwarzschild_mass)
+    if schwarzschild_mass is None:
+        current_mass = 0.0
+    else:
+        current_mass = float(schwarzschild_mass)
 
-    if fixed_fields is None:
+    if not GR:
+        fields = _flat_metric_state(grid)
+    elif fixed_fields is None:
         if previous_fields is None:
             prepared_initial_A_guess = initial_A_guess
         else:
@@ -302,6 +346,7 @@ def advance_one_step(
             current_mass,
             initial_A_guess=prepared_initial_A_guess,
             shape_mode=shape_mode,
+            EM=EM,
         )
     else:
         fields = fixed_fields
@@ -313,16 +358,19 @@ def advance_one_step(
         dt,
         current_mass,
         shape_mode=shape_mode,
-        recompute_metric_each_stage=fixed_fields is None,
+        recompute_metric_each_stage=GR and fixed_fields is None,
+        GR=GR,
+        EM=EM,
     )
 
-    if fixed_fields is None:
+    if GR and fixed_fields is None:
         fields = compute_metric(
             updated_particles,
             grid,
             current_mass,
             initial_A_guess=fields.A,
             shape_mode=shape_mode,
+            EM=EM,
         )
 
     return updated_particles, fields

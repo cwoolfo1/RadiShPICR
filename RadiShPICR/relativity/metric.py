@@ -40,6 +40,7 @@ def compute_metric(
     schwarzschild_mass,
     initial_A_guess=None,
     shape_mode="nearest",
+    EM=True,
 ):
     """Solve the metric fields sourced by the current particle distribution."""
 
@@ -82,6 +83,7 @@ def compute_metric(
         schwarzschild_mass,
         initial_A_guess=prepared_initial_A_guess,
         shape_mode=shape_mode,
+        EM=EM,
     )
     if not converged:
         raise RuntimeError(
@@ -98,19 +100,23 @@ def compute_metric(
             shape_mode=shape_mode,
         )
 
-    _, electric_field = compute_charge_density_and_radial_electric_field(
-        species_list,
-        A,
-        grid,
-        shape_mode=shape_mode,
-    )
-    rho = particle_rho + compute_EM_energy_density(electric_field)
+    rho = particle_rho
+    if EM:
+        _, electric_field = compute_charge_density_and_radial_electric_field(
+            species_list,
+            A,
+            grid,
+            shape_mode=shape_mode,
+        )
+        rho = rho + compute_EM_energy_density(electric_field)
+
     S_r = jnp.zeros_like(grid.r_full)
     S_rr = jnp.zeros_like(grid.r_full)
     for species in species_list:
         S_r = S_r + compute_Sr(species, A, grid, shape_mode=shape_mode)
         S_rr = S_rr + compute_Srr(species, A, grid, shape_mode=shape_mode)
-    S_rr = S_rr + compute_EM_stress(electric_field, A)
+    if EM:
+        S_rr = S_rr + compute_EM_stress(electric_field, A)
 
     # Birkhoff's theorem fixes the discrete exterior to the vacuum solution.
     rho = jnp.where(exact_exterior_points, 0.0, rho)

@@ -43,7 +43,7 @@ def test_lorentz_force_interpolates_field_and_scales_by_lapse_charge_to_mass():
     metric = make_metric(grid, lapse=jnp.array([1.0, 2.0, 3.0, 4.0, 5.0]))
     electric_field = jnp.array([0.0, 10.0, 20.0, 30.0, 40.0])
 
-    terms = compute_radial_lorentz_force_terms(
+    du_r_dt = compute_radial_lorentz_force_terms(
         species,
         metric,
         grid,
@@ -51,7 +51,7 @@ def test_lorentz_force_interpolates_field_and_scales_by_lapse_charge_to_mass():
     )
 
     expected = jnp.array([2.0, 4.0]) * (2.0 / 4.0) * jnp.array([10.0, 30.0])
-    assert jnp.allclose(terms.du_r_dt, expected)
+    assert jnp.allclose(du_r_dt, expected)
 
 
 def test_lorentz_force_uses_physical_charge_mass_not_weighted_metadata():
@@ -61,20 +61,20 @@ def test_lorentz_force_uses_physical_charge_mass_not_weighted_metadata():
     metric = make_metric(grid, lapse=jnp.ones_like(grid.r_full))
     electric_field = jnp.array([0.0, 10.0, 20.0, 30.0, 40.0])
 
-    unit_terms = compute_radial_lorentz_force_terms(
+    unit_du_r_dt = compute_radial_lorentz_force_terms(
         unit_weight_species,
         metric,
         grid,
         electric_field,
     )
-    weighted_terms = compute_radial_lorentz_force_terms(
+    weighted_du_r_dt = compute_radial_lorentz_force_terms(
         weighted_species,
         metric,
         grid,
         electric_field,
     )
 
-    assert jnp.allclose(weighted_terms.du_r_dt, unit_terms.du_r_dt)
+    assert jnp.allclose(weighted_du_r_dt, unit_du_r_dt)
 
 
 def test_neutral_particles_have_zero_lorentz_force():
@@ -83,11 +83,11 @@ def test_neutral_particles_have_zero_lorentz_force():
     metric = make_metric(grid, lapse=jnp.ones_like(grid.r_full))
     electric_field = jnp.array([0.0, 10.0, 20.0, 30.0, 40.0])
 
-    terms = compute_radial_lorentz_force_terms(
+    du_r_dt = compute_radial_lorentz_force_terms(
         species,
         metric,
         grid,
         electric_field,
     )
 
-    assert jnp.allclose(terms.du_r_dt, 0.0)
+    assert jnp.allclose(du_r_dt, 0.0)

@@ -196,7 +196,7 @@ def solve_newton_linear_correction(
     return delta_U, gmres_converged
 
 
-def metric_mass_energy_density_from_U(particles, U, grid, shape_mode="nearest"):
+def metric_mass_energy_density_from_U(particles, U, grid, shape_mode="nearest", EM=True):
     """Compute the particle plus EM mass-energy density for the A equation."""
     A = U**2
     species_list = _particle_list(particles)
@@ -211,29 +211,32 @@ def metric_mass_energy_density_from_U(particles, U, grid, shape_mode="nearest"):
         )
         particle_rho = particle_rho + species.get_mass() * number_density
 
-    _, electric_field = compute_charge_density_and_radial_electric_field(
-        species_list,
-        A,
-        grid,
-        shape_mode=shape_mode,
-    )
-    rho_EM = compute_EM_energy_density(electric_field)
-    rho = particle_rho + rho_EM
+    rho = particle_rho
+    if EM:
+        _, electric_field = compute_charge_density_and_radial_electric_field(
+            species_list,
+            A,
+            grid,
+            shape_mode=shape_mode,
+        )
+        rho = rho + compute_EM_energy_density(electric_field)
+
     return A, rho
 
 
-def metric_source_term_from_U(particles, U, grid, shape_mode="nearest"):
+def metric_source_term_from_U(particles, U, grid, shape_mode="nearest", EM=True):
     """Hamiltonian-constraint source term as a function of ``U = sqrt(A)``."""
     _, rho = metric_mass_energy_density_from_U(
         particles,
         U,
         grid,
         shape_mode=shape_mode,
+        EM=EM,
     )
     return -2.0 * jnp.pi * rho
 
 
-def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
+def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest", EM=True):
     """Build the mass-energy source and its JAX-autodiff Jacobian."""
 
     A, rho = metric_mass_energy_density_from_U(
@@ -241,6 +244,7 @@ def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
         U,
         grid,
         shape_mode=shape_mode,
+        EM=EM,
     )
     source_term = -2.0 * jnp.pi * rho
     source_term_U_jacobian = jax.jacfwd(
@@ -249,6 +253,7 @@ def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
             trial_U,
             grid,
             shape_mode=shape_mode,
+            EM=EM,
         )
     )(U)
     source_term_U_derivative = jnp.diag(source_term_U_jacobian)
@@ -265,7 +270,7 @@ def metric_source_terms_from_U(particles, U, grid, shape_mode="nearest"):
 
 @partial(
     jax.jit,
-    static_argnames=("max_newton_steps", "max_line_search_steps", "shape_mode"),
+    static_argnames=("max_newton_steps", "max_line_search_steps", "shape_mode", "EM"),
 )
 def solve_metric_A(
     particles,
@@ -277,6 +282,7 @@ def solve_metric_A(
     max_line_search_steps=100,
     armijo_c=1.0e-2,
     shape_mode="nearest",
+    EM=True,
 ):
 
     species_list = _particle_list(particles)
@@ -319,6 +325,7 @@ def solve_metric_A(
         U_initial,
         grid,
         shape_mode=shape_mode,
+        EM=EM,
     )
     residual = nonlinear_residual_u(
         U_initial,
@@ -354,6 +361,7 @@ def solve_metric_A(
                 U_current,
                 grid,
                 shape_mode=shape_mode,
+                EM=EM,
             )
         )
         # compute the current source term and its U derivative for the Jacobian
@@ -413,6 +421,7 @@ def solve_metric_A(
                     candidate_U,
                     grid,
                     shape_mode=shape_mode,
+                    EM=EM,
                 )
                 # compute the source term for the trial solution to evaluate the residual at that point
 

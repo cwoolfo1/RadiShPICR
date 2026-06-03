@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -12,14 +11,6 @@ from RadiShPICR.relativity.utils import (
     compute_metric_radial_derivative,
     safe_radius,
 )
-
-
-class GeodesicTerms(NamedTuple):
-    """Time derivatives for the evolved orbit variables."""
-
-    dr_dt: jnp.ndarray
-    dphi_dt: jnp.ndarray
-    du_r_dt: jnp.ndarray
 
 
 def compute_dphi_dt(
@@ -128,4 +119,4 @@ def compute_geodesic_terms(
         )
     )
 
-    return GeodesicTerms(dr_dt=dr_dt, dphi_dt=dphi_dt, du_r_dt=du_r_dt)
+    return dr_dt, dphi_dt, du_r_dt

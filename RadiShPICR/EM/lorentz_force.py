@@ -1,16 +1,9 @@
 from functools import partial
-from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
 
 from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
-
-
-class LorentzForceTerms(NamedTuple):
-    """Electromagnetic contributions to the evolved orbit variables."""
-
-    du_r_dt: jnp.ndarray
 
 
 def interpolate_to_particle(field, radial_positions, grid, shape_mode="nearest"):
@@ -49,6 +42,4 @@ def compute_radial_lorentz_force_terms(
         dtype=particles.r.dtype,
     )
 
-    return LorentzForceTerms(
-        du_r_dt= charge_to_mass * electric_field_at_particle,
-    )
+    return lapse_at_particle * charge_to_mass * electric_field_at_particle
