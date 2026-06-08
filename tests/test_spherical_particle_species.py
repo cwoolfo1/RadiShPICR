@@ -408,7 +408,7 @@ def test_solve_metric_A_skips_gauss_law_when_EM_is_false(monkeypatch):
     assert jnp.allclose(solved_A, initial_A)
 
 
-def test_A_solver_linear_correction_falls_back_when_gmres_residual_fails(monkeypatch):
+def test_A_solver_linear_correction_uses_jax_direct_solve():
     import RadiShPICR.relativity.A as A_solver
 
     jacobian_matrix = jnp.array(
@@ -420,19 +420,13 @@ def test_A_solver_linear_correction_falls_back_when_gmres_residual_fails(monkeyp
     )
     residual = jnp.array([1.0, -2.0, 0.5])
 
-    def failed_gmres(operator, rhs, **kwargs):
-        return jnp.zeros_like(rhs), None
-
-    monkeypatch.setattr(A_solver, "gmres", failed_gmres)
-
-    delta_U, gmres_converged = A_solver.solve_newton_linear_correction(
+    delta_U = A_solver.solve_newton_linear_correction(
         jacobian_matrix,
         residual,
     )
 
     expected_delta_U = jnp.linalg.solve(jacobian_matrix, -residual)
 
-    assert not bool(gmres_converged)
     assert jnp.allclose(delta_U, expected_delta_U)
 
 

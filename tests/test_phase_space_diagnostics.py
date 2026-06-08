@@ -1,7 +1,11 @@
 import numpy as np
 import jax.numpy as jnp
 
-from RadiShPICR.diagnostics import write_A_solver_residual, write_phase_space
+from RadiShPICR.diagnostics import (
+    write_A_solver_residual,
+    write_metric_fields,
+    write_phase_space,
+)
 from RadiShPICR.particles.particle_species import particle_species
 from RadiShPICR.relativity.A import nonlinear_residual_u
 from RadiShPICR.relativity.grid import build_radial_grid
@@ -83,3 +87,36 @@ def test_write_A_solver_residual_writes_hamiltonian_constraint_error(tmp_path):
         )
         assert int(snapshot["step"]) == 7
         assert np.isclose(float(snapshot["time"]), 0.35)
+
+
+def test_write_metric_fields_writes_lapse_and_A_snapshot(tmp_path):
+    grid = build_radial_grid(epsilon=0.0, r_max=1.0, num_interior_points=5)
+    A = jnp.array([1.00, 1.03, 1.08, 1.14, 1.21])
+    lapse = jnp.array([0.90, 0.94, 0.98, 1.02, 1.06])
+    metric = MetricState(
+        rho=jnp.zeros_like(A),
+        A=A,
+        lapse=lapse,
+        shift=jnp.zeros_like(A),
+        extrinsic_curvature=jnp.zeros_like(A),
+        S_r=jnp.zeros_like(A),
+        S_rr=jnp.zeros_like(A),
+        exact_exterior_points=jnp.array([False, False, False, False, True]),
+    )
+
+    output_path = write_metric_fields(
+        metric,
+        grid,
+        tmp_path,
+        step=9,
+        time=0.45,
+    )
+
+    assert output_path.name == "metric_fields_step_000009.npz"
+    assert output_path.parent == tmp_path
+    with np.load(output_path) as snapshot:
+        assert np.allclose(snapshot["r"], np.asarray(grid.r_full))
+        assert np.allclose(snapshot["A"], np.asarray(A))
+        assert np.allclose(snapshot["lapse"], np.asarray(lapse))
+        assert int(snapshot["step"]) == 9
+        assert np.isclose(float(snapshot["time"]), 0.45)

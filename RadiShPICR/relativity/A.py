@@ -2,7 +2,6 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-from jax.scipy.sparse.linalg import gmres
 
 from RadiShPICR.EM.EM_energy_momentum_tensor import compute_EM_energy_density
 from RadiShPICR.EM.gauss_law import compute_charge_density_and_radial_electric_field
@@ -20,14 +19,6 @@ from RadiShPICR.relativity.utils import (
     safe_metric_A,
     safe_radius,
 )
-
-
-GMRES_TOLERANCE = 1.0e-8
-GMRES_ABSOLUTE_TOLERANCE = 1.0e-10
-GMRES_RESTART = 20
-GMRES_MAXITER = 10
-SCHWARZ_BLOCK_SIZE = 16
-SCHWARZ_OVERLAP = 1
 
 
 def _particle_list(particles):
@@ -109,91 +100,14 @@ def build_dense_operator( radial_grid, dr, jacobian_diagonal, exact_exterior_poi
     return matrix
 
 
-def apply_overlapping_schwarz_preconditioner(
-    jacobian_matrix,
-    rhs,
-    block_size=SCHWARZ_BLOCK_SIZE,
-    overlap=SCHWARZ_OVERLAP,
-):
-    """Apply one-cell overlapping additive-Schwarz local solves to ``rhs``."""
-
-    num_points = rhs.shape[0]
-    correction = jnp.zeros_like(rhs)
-    overlap_count = jnp.zeros_like(rhs)
-
-    # Each radial subdomain solves the local Jacobian block, then deposits its
-    # correction back to the global Newton vector. Overlap points are averaged
-    # so shared cells do not receive a double-sized correction.
-    for block_start in range(0, num_points, block_size):
-        block_stop = min(block_start + block_size, num_points)
-        local_start = max(block_start - overlap, 0)
-        local_stop = min(block_stop + overlap, num_points)
-        local_indices = jnp.arange(local_start, local_stop)
-
-        local_matrix = jacobian_matrix[
-            local_indices[:, jnp.newaxis],
-            local_indices[jnp.newaxis, :],
-        ]
-        local_rhs = rhs[local_indices]
-        local_correction = jnp.linalg.solve(local_matrix, local_rhs)
-
-        correction = correction.at[local_indices].add(local_correction)
-        overlap_count = overlap_count.at[local_indices].add(1.0)
-
-    return correction / jnp.maximum(overlap_count, 1.0)
-
-
 def solve_newton_linear_correction(
     jacobian_matrix,
     current_residual,
-    gmres_tolerance=GMRES_TOLERANCE,
-    gmres_absolute_tolerance=GMRES_ABSOLUTE_TOLERANCE,
 ):
-    """Solve the Newton correction with GMRES and dense-solve fallback."""
+    """Solve the Newton correction with JAX's dense linear solver."""
 
     rhs = -current_residual
-
-    def jacobian_matvec(vector):
-        return jacobian_matrix @ vector
-
-    def schwarz_preconditioner(vector):
-        return apply_overlapping_schwarz_preconditioner(
-            jacobian_matrix,
-            vector,
-        )
-
-    gmres_restart = min(GMRES_RESTART, jacobian_matrix.shape[0])
-    delta_U_gmres, _ = gmres(
-        jacobian_matvec,
-        rhs,
-        tol=gmres_tolerance,
-        atol=gmres_absolute_tolerance,
-        restart=gmres_restart,
-        maxiter=GMRES_MAXITER,
-        M=schwarz_preconditioner,
-    )
-    # JAX GMRES currently returns ``info=None``, so explicitly check the linear
-    # residual before trusting the Krylov correction.
-    linear_residual = jacobian_matrix @ delta_U_gmres - rhs
-    linear_residual_norm = jnp.max(jnp.abs(linear_residual))
-    rhs_norm = jnp.max(jnp.abs(rhs))
-    convergence_threshold = jnp.maximum(
-        gmres_tolerance * rhs_norm,
-        gmres_absolute_tolerance,
-    )
-    gmres_converged = jnp.logical_and(
-        jnp.all(jnp.isfinite(delta_U_gmres)),
-        linear_residual_norm <= convergence_threshold,
-    )
-
-    delta_U = jax.lax.cond(
-        gmres_converged,
-        lambda gmres_delta: gmres_delta,
-        lambda _: jnp.linalg.solve(jacobian_matrix, rhs),
-        delta_U_gmres,
-    )
-
-    return delta_U, gmres_converged
+    return jnp.linalg.solve(jacobian_matrix, rhs)
 
 
 def metric_mass_energy_density_from_U(particles, U, grid, shape_mode="nearest", EM=True):
@@ -277,9 +191,9 @@ def solve_metric_A(
     grid,
     schwarzschild_mass,
     initial_A_guess,
-    tolerance=1.0e-4,
-    max_newton_steps=10000,
-    max_line_search_steps=100,
+    tolerance=1.0e-9,
+    max_newton_steps=40000,
+    max_line_search_steps=300,
     armijo_c=1.0e-2,
     shape_mode="nearest",
     EM=True,
@@ -386,13 +300,11 @@ def solve_metric_A(
             source_term_U_jacobian * U_current[:, jnp.newaxis] ** 5
         )
         # build the Jacobian matrix for the current state
-        delta_U, _ = solve_newton_linear_correction(
+        delta_U = solve_newton_linear_correction(
             jacobian_matrix,
             current_residual,
         )
-        # solve for the Newton update with GMRES plus overlapping Schwarz
-        # preconditioning; fall back to the dense solve if GMRES does not meet
-        # the checked linear residual tolerance.
+        # solve the dense Newton system directly with JAX's linear solver
 
         # Armijo backtracking on the merit phi = 0.5 ||R||^2.
         # For the Newton direction, d/d_alpha phi(U + alpha dU)|_0 = -||R||^2,
