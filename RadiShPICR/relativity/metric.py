@@ -12,6 +12,7 @@ from RadiShPICR.relativity.energy_momentum_tensor import compute_Sr, compute_Srr
 from RadiShPICR.relativity.lapse import compute_lapse
 from RadiShPICR.relativity.schwarzschild import schwarzschild_A
 from RadiShPICR.relativity.shift import compute_shift
+from RadiShPICR.relativity.solvers import solve_metric_A_broyden
 from RadiShPICR.relativity.utils import exact_exterior_points_from_last_matter_index
 
 
@@ -40,6 +41,7 @@ def compute_metric(
     schwarzschild_mass,
     initial_A_guess=None,
     shape_mode="nearest",
+    metric_A_solver="newton",
     EM=True,
 ):
     """Solve the metric fields sourced by the current particle distribution."""
@@ -77,17 +79,32 @@ def compute_metric(
                 f"expected {grid.r_full.shape}, got {prepared_initial_A_guess.shape}."
             )
 
-    A, converged, residual = solve_metric_A(
-        particles,
-        grid,
-        schwarzschild_mass,
-        initial_A_guess=prepared_initial_A_guess,
-        shape_mode=shape_mode,
-        EM=EM,
-    )
+    if metric_A_solver == "newton":
+        A, converged, residual = solve_metric_A(
+            particles,
+            grid,
+            schwarzschild_mass,
+            initial_A_guess=prepared_initial_A_guess,
+            shape_mode=shape_mode,
+            EM=EM,
+        )
+        solver_name = "solve_metric_A"
+    elif metric_A_solver == "broyden":
+        A, converged, residual = solve_metric_A_broyden(
+            particles,
+            grid,
+            schwarzschild_mass,
+            initial_A_guess=prepared_initial_A_guess,
+            shape_mode=shape_mode,
+            EM=EM,
+        )
+        solver_name = "solve_metric_A_broyden"
+    else:
+        raise ValueError("metric_A_solver must be 'newton' or 'broyden'.")
+
     if not converged:
         raise RuntimeError(
-            "solve_metric_A did not converge: ||R||_inf exceeded tolerance. "
+            f"{solver_name} did not converge: ||R||_inf exceeded tolerance. "
             f"Last residual: {residual}"
         )
 

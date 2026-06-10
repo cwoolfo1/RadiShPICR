@@ -114,6 +114,7 @@ def _rk4_step_one_species(
     schwarzschild_mass,
     shape_mode="nearest",
     recompute_metric_each_stage=False,
+    metric_A_solver="newton",
     source_particles=None,
     source_particle_index=None,
     GR=True,
@@ -157,6 +158,7 @@ def _rk4_step_one_species(
             schwarzschild_mass,
             initial_A_guess=fields_for_step.A,
             shape_mode=shape_mode,
+            metric_A_solver=metric_A_solver,
             EM=EM,
         )
     else:
@@ -193,6 +195,7 @@ def _rk4_step_one_species(
             schwarzschild_mass,
             initial_A_guess=fields_k2.A,
             shape_mode=shape_mode,
+            metric_A_solver=metric_A_solver,
             EM=EM,
         )
     else:
@@ -229,6 +232,7 @@ def _rk4_step_one_species(
             schwarzschild_mass,
             initial_A_guess=fields_k3.A,
             shape_mode=shape_mode,
+            metric_A_solver=metric_A_solver,
             EM=EM,
         )
     else:
@@ -270,6 +274,7 @@ def rk4_step(
     schwarzschild_mass,
     shape_mode="nearest",
     recompute_metric_each_stage=False,
+    metric_A_solver="newton",
     GR=True,
     EM=True,
 ):
@@ -286,6 +291,7 @@ def rk4_step(
                     schwarzschild_mass,
                     shape_mode=shape_mode,
                     recompute_metric_each_stage=recompute_metric_each_stage,
+                    metric_A_solver=metric_A_solver,
                     source_particles=particle_list,
                     source_particle_index=species_index,
                     GR=GR,
@@ -302,6 +308,7 @@ def rk4_step(
         schwarzschild_mass,
         shape_mode=shape_mode,
         recompute_metric_each_stage=recompute_metric_each_stage,
+        metric_A_solver=metric_A_solver,
         GR=GR,
         EM=EM,
     )
@@ -317,6 +324,7 @@ def advance_one_step(
     fixed_fields=None,
     remove_escaped_particles=True,
     shape_mode="nearest",
+    metric_A_solver="newton",
     GR=True,
     EM=True,
 ):
@@ -346,6 +354,7 @@ def advance_one_step(
             current_mass,
             initial_A_guess=prepared_initial_A_guess,
             shape_mode=shape_mode,
+            metric_A_solver=metric_A_solver,
             EM=EM,
         )
     else:
@@ -359,6 +368,7 @@ def advance_one_step(
         current_mass,
         shape_mode=shape_mode,
         recompute_metric_each_stage=GR and fixed_fields is None,
+        metric_A_solver=metric_A_solver,
         GR=GR,
         EM=EM,
     )
@@ -370,6 +380,7 @@ def advance_one_step(
             current_mass,
             initial_A_guess=fields.A,
             shape_mode=shape_mode,
+            metric_A_solver=metric_A_solver,
             EM=EM,
         )
 

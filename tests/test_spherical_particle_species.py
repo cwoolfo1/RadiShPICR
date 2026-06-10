@@ -1012,6 +1012,7 @@ def test_advance_one_step_recomputes_metric_and_electric_field_for_dynamic_rk4(m
         dr=0.25,
     )
     metric_calls = []
+    metric_solver_calls = []
     electric_field_calls = []
 
     def fake_compute_metric(
@@ -1020,6 +1021,7 @@ def test_advance_one_step_recomputes_metric_and_electric_field_for_dynamic_rk4(m
         schwarzschild_mass,
         initial_A_guess=None,
         shape_mode="nearest",
+        metric_A_solver="newton",
         EM=True,
     ):
         assert EM is True
@@ -1027,6 +1029,7 @@ def test_advance_one_step_recomputes_metric_and_electric_field_for_dynamic_rk4(m
             stage_particles = stage_particles[0]
         stage_radius_mean = jnp.mean(stage_particles.r)
         metric_calls.append(stage_radius_mean)
+        metric_solver_calls.append(metric_A_solver)
         stage_A = jnp.full_like(metric_grid.r_full, stage_radius_mean)
 
         return MetricState(
@@ -1085,12 +1088,14 @@ def test_advance_one_step_recomputes_metric_and_electric_field_for_dynamic_rk4(m
         grid,
         dt=0.2,
         schwarzschild_mass=0.0,
+        metric_A_solver="broyden",
     )
 
     expected_stage_radius_means = jnp.array([0.5, 0.55, 0.555, 0.611])
     expected_final_radius_mean = jnp.mean(updated_particles.r)
 
     assert len(metric_calls) == 5
+    assert metric_solver_calls == ["broyden"] * 5
     assert jnp.allclose(jnp.asarray(metric_calls[:4]), expected_stage_radius_means)
     assert jnp.allclose(metric_calls[-1], expected_final_radius_mean)
     assert len(electric_field_calls) == 4
@@ -1126,6 +1131,7 @@ def test_advance_one_step_advances_species_list_with_shared_stage_fields(monkeyp
         schwarzschild_mass,
         initial_A_guess=None,
         shape_mode="nearest",
+        metric_A_solver="newton",
         EM=True,
     ):
         assert EM is True
