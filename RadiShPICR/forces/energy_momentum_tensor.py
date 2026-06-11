@@ -8,6 +8,7 @@ from RadiShPICR.deposition.particle_shapes import (
     radial_shape_stencil,
 )
 from RadiShPICR.relativity.utils import safe_radius
+from forces import grid
 
 
 def interpolate_to_particle(field, radial_positions, grid, shape_mode="nearest"):
@@ -26,28 +27,24 @@ def _deposit_particle_values(radial_positions, particle_values, grid, shape_mode
     # Each particle contributes to the cells in its shape-function support.
     source = source.at[indices].add(weights * particle_values[jnp.newaxis, :])
 
-    # The first and last cells are boundary cells, so they do not carry matter.
-    source = source.at[0].set(0.0)
-    source = source.at[-1].set(0.0)
     return source
 
 
-@partial(jax.jit, static_argnames=("shape_mode",))
-def compute_Sr(particles, A, grid, shape_mode="nearest"):
-    """Compute the radial momentum density ``S_r`` on the polar radial grid."""
+def Sr_at_point(particles, A_at_point, point, dr, shape_mode="nearest"):
+    """Compute the radial momentum density ``S_r`` at a single point on the grid."""
 
     radial_positions = particles.r
     radial_momenta = particles.u_r
     particle_masses = particles.get_mass()
 
-    A_at_particle = interpolate_to_particle(A, radial_positions, grid, shape_mode=shape_mode)
+    A_at_particle = interpolate_to_particle(A_at_point, radial_positions, grid, shape_mode=shape_mode)
     safe_r_particle = safe_radius(radial_positions, grid.epsilon)
 
     # The spherical cell volume contributes 4 pi r^2 dr, and the polar metric
     # determinant contributes A^3 for the conformally flat spatial metric.
     particle_contribution = particle_masses * radial_momenta
     particle_contribution = particle_contribution / (
-        4.0 * jnp.pi * A_at_particle**3 * safe_r_particle**2 * grid.dr
+        4.0 * jnp.pi * A_at_particle**3 * safe_r_particle**2 * dr
     )
 
     return _deposit_particle_values(
@@ -55,19 +52,18 @@ def compute_Sr(particles, A, grid, shape_mode="nearest"):
         particle_contribution,
         grid,
         shape_mode=shape_mode,
-    )
+    )[point]
 
 
-@partial(jax.jit, static_argnames=("shape_mode",))
-def compute_Srr(particles, A, grid, shape_mode="nearest"):
-    """Compute the radial stress ``S_rr`` on the polar radial grid."""
+def Srr_at_point(particles, A_at_point, point, dr, shape_mode="nearest"):
+    """Compute the radial stress ``S_rr`` at a single point on the grid."""
 
     radial_positions = particles.r
     radial_momenta = particles.u_r
     azimuthal_momenta = particles.u_phi
     particle_masses = particles.get_mass()
 
-    A_at_particle = interpolate_to_particle(A, radial_positions, grid, shape_mode=shape_mode)
+    A_at_particle = interpolate_to_particle(A_at_point, radial_positions, grid, shape_mode=shape_mode)
     safe_r_particle = safe_radius(radial_positions, grid.epsilon)
 
     # W is the Lorentz factor between the particle four-momentum and the normal
@@ -86,8 +82,7 @@ def compute_Srr(particles, A, grid, shape_mode="nearest"):
         * jnp.pi
         * A_at_particle**3
         * safe_r_particle**2
-        * grid.dr
-        * lorentz_factor
+        * dr * lorentz_factor
     )
 
     return _deposit_particle_values(
@@ -95,4 +90,4 @@ def compute_Srr(particles, A, grid, shape_mode="nearest"):
         particle_contribution,
         grid,
         shape_mode=shape_mode,
-    )
+    )[point]

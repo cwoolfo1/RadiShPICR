@@ -1,3 +1,3 @@
-from .particle_species import ParticleSpecies, particle_species
+from .particle_species import particle_species
 
-__all__ = ["ParticleSpecies", "particle_species"]
+__all__ = ["particle_species"]
