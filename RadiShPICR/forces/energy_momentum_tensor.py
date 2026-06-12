@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from RadiShPICR.deposition.charge_density import shape_weights_at_point
+from RadiShPICR.deposition.particle_shapes import shape_weights_at_point
 
 
 def Sr_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):

@@ -1,20 +1,5 @@
 import jax.numpy as jnp
-
-
-def shape_weights_at_point(radial_positions, radial_coordinate, dr, shape_mode="nearest"):
-    if shape_mode == "nearest":
-        return jnp.where(jnp.abs(radial_positions - radial_coordinate) < 0.5 * dr, 1.0, 0.0)
-
-    delta = (radial_positions - radial_coordinate) / dr
-    center_particles = jnp.where(jnp.abs(delta) < 0.5, 0.75 - delta**2, 0.0)
-    left_particles = jnp.where(
-        (delta >= -1.5) & (delta < -0.5), 0.5 * (0.5 - delta) ** 2, 0.0
-    )
-    right_particles = jnp.where(
-        (delta > 0.5) & (delta <= 1.5), 0.5 * (0.5 + delta) ** 2, 0.0
-    )
-
-    return center_particles + left_particles + right_particles
+from RadiShPICR.deposition.particle_shapes import shape_weights_at_point
 
 
 def charge_density_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):

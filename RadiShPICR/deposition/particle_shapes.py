@@ -6,19 +6,10 @@ import jax.numpy as jnp
 from RadiShPICR.forces.utils import nearest_interior_index
 
 
-def _check_shape_mode(shape_mode):
-    if shape_mode not in ("nearest", "quadratic"):
-        raise ValueError(
-            "shape_mode must be either 'nearest' or 'quadratic', "
-            f"got {shape_mode!r}."
-        )
-
 
 @partial(jax.jit, static_argnames=("shape_mode",))
 def radial_shape_stencil(radial_positions, grid, shape_mode="nearest"):
     """Return radial deposition/interpolation indices and weights."""
-
-    _check_shape_mode(shape_mode)
 
     if shape_mode == "nearest":
         indices = nearest_interior_index(radial_positions, grid)[jnp.newaxis, :]
@@ -71,8 +62,6 @@ def radial_shape_stencil(radial_positions, grid, shape_mode="nearest"):
 def interpolate_field_to_particles(field, radial_positions, grid, shape_mode="nearest"):
     """Interpolate a radial grid field to particle positions."""
 
-    _check_shape_mode(shape_mode)
-
     if shape_mode == "nearest":
         return jnp.interp(radial_positions, grid.r_full, field)
 
@@ -84,9 +73,17 @@ def interpolate_field_to_particles(field, radial_positions, grid, shape_mode="ne
     return jnp.sum(field[indices] * weights, axis=0)
 
 
-@partial(jax.jit, static_argnames=("shape_mode",))
-def last_shape_support_index(radial_positions, grid, shape_mode="nearest"):
-    """Return the outermost interior grid index touched by particle support."""
+def shape_weights_at_point(radial_positions, radial_coordinate, dr, shape_mode="nearest"):
+    if shape_mode == "nearest":
+        return jnp.where(jnp.abs(radial_positions - radial_coordinate) < 0.5 * dr, 1.0, 0.0)
 
-    indices, _ = radial_shape_stencil(radial_positions, grid, shape_mode=shape_mode)
-    return jnp.max(indices)
+    delta = (radial_positions - radial_coordinate) / dr
+    center_particles = jnp.where(jnp.abs(delta) < 0.5, 0.75 - delta**2, 0.0)
+    left_particles = jnp.where(
+        (delta >= -1.5) & (delta < -0.5), 0.5 * (0.5 - delta) ** 2, 0.0
+    )
+    right_particles = jnp.where(
+        (delta > 0.5) & (delta <= 1.5), 0.5 * (0.5 + delta) ** 2, 0.0
+    )
+
+    return center_particles + left_particles + right_particles
