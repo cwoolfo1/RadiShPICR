@@ -50,6 +50,9 @@ def test_package_respects_explicit_jax_x64_environment_setting():
 
 
 def test_radial_electric_solver_imports_without_relativity_metric_cycle():
-    from RadiShPICR.EM import compute_charge_density_and_radial_electric_field
+    from RadiShPICR.evolve import step, step_rk4
+    from RadiShPICR.forces import calculate_metric
 
-    assert callable(compute_charge_density_and_radial_electric_field)
+    assert callable(step)
+    assert callable(step_rk4)
+    assert callable(calculate_metric)

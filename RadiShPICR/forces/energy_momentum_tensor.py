@@ -1,93 +1,32 @@
-from functools import partial
-
-import jax
 import jax.numpy as jnp
 
-from RadiShPICR.deposition.particle_shapes import (
-    interpolate_field_to_particles,
-    radial_shape_stencil,
-)
-from RadiShPICR.relativity.utils import safe_radius
-from forces import grid
+from RadiShPICR.deposition.charge_density import shape_weights_at_point
 
 
-def interpolate_to_particle(field, radial_positions, grid, shape_mode="nearest"):
-    """Interpolate one grid field from radial grid points to particles."""
+def Sr_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):
+    r_particle, _ = particles.get_positions()
+    ur, _ = particles.get_velocities()
+    particle_shape = particles.get_shape() if shape_mode is None else shape_mode
 
-    return interpolate_field_to_particles(field, radial_positions, grid, shape_mode=shape_mode)
+    weights = shape_weights_at_point(r_particle, radial_coordinate, dr, particle_shape)
+    safe_r = jnp.maximum(jnp.asarray(radial_coordinate, dtype=r_particle.dtype), 0.5 * dr)
+    cell_volume = 4.0 * jnp.pi * A_at_point**3 * safe_r**2 * dr
 
-
-@partial(jax.jit, static_argnames=("shape_mode",))
-def _deposit_particle_values(radial_positions, particle_values, grid, shape_mode="nearest"):
-    """Deposit one scalar particle contribution onto the radial grid."""
-
-    source = jnp.zeros_like(grid.r_full)
-    indices, weights = radial_shape_stencil(radial_positions, grid, shape_mode=shape_mode)
-
-    # Each particle contributes to the cells in its shape-function support.
-    source = source.at[indices].add(weights * particle_values[jnp.newaxis, :])
-
-    return source
+    return jnp.sum(particles.get_mass() * weights * ur / cell_volume)
 
 
-def Sr_at_point(particles, A_at_point, point, dr, shape_mode="nearest"):
-    """Compute the radial momentum density ``S_r`` at a single point on the grid."""
+def Srr_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):
+    r_particle, _ = particles.get_positions()
+    ur, uphi = particles.get_velocities()
+    particle_shape = particles.get_shape() if shape_mode is None else shape_mode
 
-    radial_positions = particles.r
-    radial_momenta = particles.u_r
-    particle_masses = particles.get_mass()
-
-    A_at_particle = interpolate_to_particle(A_at_point, radial_positions, grid, shape_mode=shape_mode)
-    safe_r_particle = safe_radius(radial_positions, grid.epsilon)
-
-    # The spherical cell volume contributes 4 pi r^2 dr, and the polar metric
-    # determinant contributes A^3 for the conformally flat spatial metric.
-    particle_contribution = particle_masses * radial_momenta
-    particle_contribution = particle_contribution / (
-        4.0 * jnp.pi * A_at_particle**3 * safe_r_particle**2 * dr
-    )
-
-    return _deposit_particle_values(
-        radial_positions,
-        particle_contribution,
-        grid,
-        shape_mode=shape_mode,
-    )[point]
-
-
-def Srr_at_point(particles, A_at_point, point, dr, shape_mode="nearest"):
-    """Compute the radial stress ``S_rr`` at a single point on the grid."""
-
-    radial_positions = particles.r
-    radial_momenta = particles.u_r
-    azimuthal_momenta = particles.u_phi
-    particle_masses = particles.get_mass()
-
-    A_at_particle = interpolate_to_particle(A_at_point, radial_positions, grid, shape_mode=shape_mode)
-    safe_r_particle = safe_radius(radial_positions, grid.epsilon)
-
-    # W is the Lorentz factor between the particle four-momentum and the normal
-    # observer in the spherical isotropic spatial metric.
+    weights = shape_weights_at_point(r_particle, radial_coordinate, dr, particle_shape)
+    safe_r = jnp.maximum(jnp.asarray(radial_coordinate, dtype=r_particle.dtype), 0.5 * dr)
     lorentz_factor = jnp.sqrt(
         1.0
-        + radial_momenta**2 / A_at_particle**2
-        + azimuthal_momenta**2 / (safe_r_particle**2 * A_at_particle**2)
+        + ur**2 / A_at_point**2
+        + uphi**2 / (safe_r**2 * A_at_point**2)
     )
+    cell_volume = 4.0 * jnp.pi * A_at_point**3 * safe_r**2 * dr
 
-    # S_rr is the radial-radial projection of the stress tensor per spherical
-    # grid volume, including the same metric volume factor as S_r.
-    particle_contribution = particle_masses * radial_momenta**2
-    particle_contribution = particle_contribution / (
-        4.0
-        * jnp.pi
-        * A_at_particle**3
-        * safe_r_particle**2
-        * dr * lorentz_factor
-    )
-
-    return _deposit_particle_values(
-        radial_positions,
-        particle_contribution,
-        grid,
-        shape_mode=shape_mode,
-    )[point]
+    return jnp.sum(particles.get_mass() * weights * ur**2 / (cell_volume * lorentz_factor))

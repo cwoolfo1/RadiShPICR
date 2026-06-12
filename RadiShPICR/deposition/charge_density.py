@@ -1,53 +1,34 @@
-from functools import partial
-
-import jax
 import jax.numpy as jnp
 
-def charge_density_at_point(particles, A_at_point, point, dr, shape_mode="nearest"):
-    # particles is the particle data structure containing particle positions and velocities
-    # A_at_point is the metric factor A evaluated at the specified point on the grid
-    # point is the radial grid index at which to compute the charge density
-    # dr is the grid spacing in the radial direction
-    # shape_mode specifies the particle shape function to use for deposition
 
-    index_position = point * dr
-    # compute the physical radial position corresponding to the specified grid index
-
+def shape_weights_at_point(radial_positions, radial_coordinate, dr, shape_mode="nearest"):
     if shape_mode == "nearest":
-        r_particle = particles.r
-        weights = jnp.where(jnp.abs(r_particle - index_position) < 0.5 * dr, 1.0, 0.0)
-        # if the shape mode is "nearest", compute the weights as 1 for particles within half a grid spacing of the point, and 0 otherwise
-    else:
-        r_particle = particles.r
+        return jnp.where(jnp.abs(radial_positions - radial_coordinate) < 0.5 * dr, 1.0, 0.0)
 
-        # left side of the stencil : 0.5 * (0.5 - delta) ** 2
-        # center of the stencil : 0.75 - delta**2
-        # right side of the stencil : 0.5 * (0.5 + delta) ** 2
+    delta = (radial_positions - radial_coordinate) / dr
+    center_particles = jnp.where(jnp.abs(delta) < 0.5, 0.75 - delta**2, 0.0)
+    left_particles = jnp.where(
+        (delta >= -1.5) & (delta < -0.5), 0.5 * (0.5 - delta) ** 2, 0.0
+    )
+    right_particles = jnp.where(
+        (delta > 0.5) & (delta <= 1.5), 0.5 * (0.5 + delta) ** 2, 0.0
+    )
 
-        deltas = (r_particle - index_position) / dr
-        # compute the normalized distance of each particle from the point in units of the grid spacing
-
-        center_particles = jnp.where(jnp.abs(deltas) < 0.5, 0.75 - deltas**2, 0.0)
-        # weights for particles within the center of the stencil (within half a grid spacing of the point)
-        left_particles = jnp.where(
-            (deltas >= -1.5) & (deltas < -0.5), 0.5 * (0.5 - deltas) ** 2, 0.0
-        )
-        # weights for particles on the left side of the stencil (between 0.5 and 1.5 grid spacings to the left of the point)
-        right_particles = jnp.where(
-            (deltas > 0.5) & (deltas <= 1.5), 0.5 * (0.5 + deltas) ** 2, 0.0
-        )
-        # weights for particles on the right side of the stencil (between 0.5 and 1.5 grid spacings to the right of the point)
-
-        weights = center_particles + left_particles + right_particles
-        # total weights for each particle based on their position relative to the point and the chosen shape
-
-    lorenz_factors = jnp.sqrt(1.0 + (particles.u_r**2 / A_at_point**2) + (particles.u_phi**2 / (A_at_point**2 * index_position**2)))
-    # compute the Lorentz factor for each particle at the point using their velocities and the metric factor A 
-
-    charge = particles.get_charge()
-    # get the charge of each particle from the particle data structure
-    charge_density_at_point = jnp.sum(charge * weights * lorenz_factors /  ( 4 * jnp.pi * A_at_point**3 * index_position**2 * dr )  )
-    # compute the charge density at the point by summing the contributions from all particles, accounting for their charge, shape weights, Lorentz factors, and the volume element in spherical coordinates   
+    return center_particles + left_particles + right_particles
 
 
-    return charge_density_at_point
+def charge_density_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):
+    r_particle, _ = particles.get_positions()
+    ur, uphi = particles.get_velocities()
+    particle_shape = particles.get_shape() if shape_mode is None else shape_mode
+
+    weights = shape_weights_at_point(r_particle, radial_coordinate, dr, particle_shape)
+    safe_r = jnp.maximum(jnp.asarray(radial_coordinate, dtype=r_particle.dtype), 0.5 * dr)
+    lorentz_factors = jnp.sqrt(
+        1.0
+        + ur**2 / A_at_point**2
+        + uphi**2 / (A_at_point**2 * safe_r**2)
+    )
+
+    cell_volume = 4.0 * jnp.pi * A_at_point**3 * safe_r**2 * dr
+    return jnp.sum(particles.get_charge() * weights * lorentz_factors / cell_volume)

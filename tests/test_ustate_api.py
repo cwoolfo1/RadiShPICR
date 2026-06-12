@@ -1,0 +1,372 @@
+import jax.numpy as jnp
+
+import RadiShPICR.evolve as evolve
+from RadiShPICR.evolve import step, step_rk4
+from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
+from RadiShPICR.forces import calculate_metric
+from RadiShPICR.forces.grid import RadialGrid
+from RadiShPICR.forces.geodesic import compute_geodesic_terms
+from RadiShPICR.forces.lorentz_force import compute_lorentz_terms
+from RadiShPICR.particles import particle_species
+
+
+def make_species(charge=0.0, mass=1.0, weight=1.0):
+    return particle_species(
+        name="test",
+        charge=charge,
+        mass=mass,
+        weight=weight,
+        r=jnp.asarray([0.25, 0.75]),
+        ur=jnp.asarray([0.10, -0.20]),
+        phi=jnp.asarray([0.0, 0.2]),
+        uphi=jnp.asarray([0.0, 0.0]),
+        shape_mode="nearest",
+    )
+
+
+def make_interpolation_grid(r_grid):
+    dr = r_grid[1] - r_grid[0]
+    return RadialGrid(
+        r_full=r_grid,
+        r_interior=r_grid,
+        dr=dr,
+        epsilon=0.5 * dr,
+        r_max=r_grid[-1],
+    )
+
+
+def test_particle_species_current_api():
+    species = make_species(charge=2.0, mass=4.0, weight=0.5)
+
+    r, phi = species.get_positions()
+    ur, uphi = species.get_velocities()
+
+    assert species.name == "test"
+    assert jnp.allclose(r, species.r)
+    assert jnp.allclose(phi, species.phi)
+    assert jnp.allclose(ur, species.ur)
+    assert jnp.allclose(uphi, species.uphi)
+    assert species.get_charge() == 1.0
+    assert species.get_mass() == 2.0
+    assert species.get_shape() == "nearest"
+
+
+def test_calculate_metric_returns_grid_level_ustate_for_zero_source():
+    particles = make_species(charge=0.0, mass=0.0)
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+    U_state = calculate_metric(particles, r_grid, r_grid[1] - r_grid[0])
+
+    A, phi, alpha, Krr, beta_over_r, Er, source_terms, returned_grid = U_state
+    mass_density, charge_density, Srr, Sr = source_terms
+
+    assert jnp.allclose(returned_grid, r_grid)
+    assert A.shape == r_grid.shape
+    assert phi.shape == r_grid.shape
+    assert alpha.shape == r_grid.shape
+    assert Krr.shape == r_grid.shape
+    assert beta_over_r.shape == r_grid.shape
+    assert Er.shape == r_grid.shape
+    assert mass_density.shape == r_grid.shape
+    assert charge_density.shape == r_grid.shape
+    assert Srr.shape == r_grid.shape
+    assert Sr.shape == r_grid.shape
+    assert jnp.allclose(A, 1.0)
+    assert jnp.allclose(phi, 0.0)
+    assert jnp.allclose(alpha, 1.0)
+    assert jnp.allclose(Krr, 0.0)
+    assert jnp.allclose(beta_over_r, 0.0)
+    assert jnp.allclose(Er, 0.0)
+
+
+def test_calculate_metric_returns_source_terms_for_nonzero_particles():
+    particles = make_species(charge=1.0, mass=2.0, weight=1.0)
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+    U_state = calculate_metric(particles, r_grid, r_grid[1] - r_grid[0])
+
+    _, _, _, _, _, _, source_terms, _ = U_state
+    mass_density, charge_density, Srr, Sr = source_terms
+
+    assert mass_density.shape == r_grid.shape
+    assert charge_density.shape == r_grid.shape
+    assert Srr.shape == r_grid.shape
+    assert Sr.shape == r_grid.shape
+    assert jnp.any(mass_density > 0.0)
+    assert jnp.any(charge_density > 0.0)
+
+
+def test_force_terms_consume_ustate_directly():
+    particles = make_species(charge=1.0, mass=2.0)
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+    U_state = calculate_metric(particles, r_grid, r_grid[1] - r_grid[0])
+
+    dr_dt, dur_dt_GR = compute_geodesic_terms(particles, U_state)
+    dur_dt_EM = compute_lorentz_terms(particles, U_state)
+
+    assert dr_dt.shape == particles.r.shape
+    assert dur_dt_GR.shape == particles.r.shape
+    assert dur_dt_EM.shape == particles.r.shape
+
+
+def test_lorentz_force_uses_particle_shape_interpolation_for_fields():
+    particles = particle_species(
+        name="test",
+        charge=3.0,
+        mass=2.0,
+        weight=1.0,
+        r=jnp.asarray([1.25]),
+        ur=jnp.asarray([0.0]),
+        phi=jnp.asarray([0.0]),
+        uphi=jnp.asarray([0.0]),
+        shape_mode="quadratic",
+    )
+    r_grid = jnp.asarray([0.0, 1.0, 2.0, 3.0, 4.0])
+    grid = make_interpolation_grid(r_grid)
+    alpha_values = jnp.asarray([1.0, 1.5, 2.5, 4.0, 6.0])
+    Er_values = jnp.asarray([0.0, 1.0, 4.0, 9.0, 16.0])
+    source_terms = tuple(jnp.zeros_like(r_grid) for _ in range(4))
+    U_state = (
+        jnp.ones_like(r_grid),
+        jnp.zeros_like(r_grid),
+        alpha_values,
+        jnp.zeros_like(r_grid),
+        jnp.zeros_like(r_grid),
+        Er_values,
+        source_terms,
+        r_grid,
+    )
+
+    lapse_at_particle = interpolate_field_to_particles(
+        alpha_values,
+        particles.r,
+        grid,
+        shape_mode=particles.get_shape(),
+    )
+    electric_field_at_particle = interpolate_field_to_particles(
+        Er_values,
+        particles.r,
+        grid,
+        shape_mode=particles.get_shape(),
+    )
+    expected = (
+        lapse_at_particle
+        * particles.get_charge()
+        * electric_field_at_particle
+        / particles.get_mass()
+    )
+    linear_expected = (
+        jnp.interp(particles.r, r_grid, alpha_values)
+        * particles.get_charge()
+        * jnp.interp(particles.r, r_grid, Er_values)
+        / particles.get_mass()
+    )
+
+    assert not jnp.allclose(expected, linear_expected)
+    assert jnp.allclose(compute_lorentz_terms(particles, U_state), expected)
+
+
+def test_geodesic_terms_use_particle_shape_interpolation_for_metric_fields():
+    particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([1.25]),
+        ur=jnp.asarray([0.2]),
+        phi=jnp.asarray([0.0]),
+        uphi=jnp.asarray([0.0]),
+        shape_mode="quadratic",
+    )
+    r_grid = jnp.asarray([0.0, 1.0, 2.0, 3.0, 4.0])
+    grid = make_interpolation_grid(r_grid)
+    A_values = jnp.asarray([1.0, 2.0, 5.0, 10.0, 17.0])
+    source_terms = tuple(jnp.zeros_like(r_grid) for _ in range(4))
+    U_state = (
+        A_values,
+        jnp.zeros_like(r_grid),
+        jnp.ones_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.zeros_like(r_grid),
+        source_terms,
+        r_grid,
+    )
+
+    A_at_particle = interpolate_field_to_particles(
+        A_values,
+        particles.r,
+        grid,
+        shape_mode=particles.get_shape(),
+    )
+    W = jnp.sqrt(1.0 + particles.ur**2 / A_at_particle**2)
+    expected_dr_dt = particles.ur / (A_at_particle**2 * W)
+
+    A_linear = jnp.interp(particles.r, r_grid, A_values)
+    W_linear = jnp.sqrt(1.0 + particles.ur**2 / A_linear**2)
+    linear_dr_dt = particles.ur / (A_linear**2 * W_linear)
+
+    dr_dt, du_r_dt = compute_geodesic_terms(particles, U_state)
+
+    assert not jnp.allclose(expected_dr_dt, linear_dr_dt)
+    assert jnp.allclose(dr_dt, expected_dr_dt)
+    assert jnp.allclose(du_r_dt, 0.0)
+
+
+def test_step_updates_current_particle_class_in_place_and_preserves_uphi():
+    particles = make_species(charge=1.0, mass=2.0)
+    initial_r = particles.r.copy()
+    initial_ur = particles.ur.copy()
+    initial_uphi = particles.uphi.copy()
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+
+    updated = step(particles, r_grid, r_grid[1] - r_grid[0], dt=0.05)
+
+    assert updated is particles
+    assert not jnp.allclose(updated.r, initial_r)
+    assert updated.ur.shape == initial_ur.shape
+    assert jnp.allclose(updated.uphi, initial_uphi)
+
+
+def test_step_rk4_imports_as_additional_timestep_option():
+    assert callable(step_rk4)
+
+
+def test_step_rk4_updates_current_particle_class_in_place_and_preserves_uphi(monkeypatch):
+    calls = []
+
+    def fake_calculate_metric(stage_particles, r_grid, dr):
+        calls.append(stage_particles.r.copy())
+        return None
+
+    def fake_geodesic_terms(stage_particles, U_state):
+        return jnp.ones_like(stage_particles.r), jnp.full_like(stage_particles.ur, 0.5)
+
+    def fake_lorentz_terms(stage_particles, U_state):
+        return jnp.full_like(stage_particles.ur, 0.25)
+
+    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+
+    particles = make_species(charge=1.0, mass=2.0)
+    initial_r = particles.r.copy()
+    initial_uphi = particles.uphi.copy()
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+
+    updated = step_rk4(particles, r_grid, r_grid[1] - r_grid[0], dt=0.1)
+
+    assert updated is particles
+    assert len(calls) == 4
+    assert updated.r.shape == initial_r.shape
+    assert updated.ur.shape == initial_r.shape
+    assert jnp.allclose(updated.r, initial_r + 0.1)
+    assert jnp.allclose(updated.uphi, initial_uphi)
+
+
+def test_step_rk4_recomputes_stage_specific_metric_and_em_field(monkeypatch):
+    metric_stage_positions = []
+    geodesic_Er_values = []
+    lorentz_Er_values = []
+
+    def fake_calculate_metric(stage_particles, r_grid, dr):
+        stage_number = len(metric_stage_positions) + 1
+        metric_stage_positions.append(stage_particles.r.copy())
+        Er = jnp.full_like(r_grid, float(stage_number))
+        source_terms = (
+            jnp.zeros_like(r_grid),
+            jnp.zeros_like(r_grid),
+            jnp.zeros_like(r_grid),
+            jnp.zeros_like(r_grid),
+        )
+        return (
+            jnp.ones_like(r_grid),
+            jnp.zeros_like(r_grid),
+            jnp.ones_like(r_grid),
+            jnp.zeros_like(r_grid),
+            jnp.zeros_like(r_grid),
+            Er,
+            source_terms,
+            r_grid,
+        )
+
+    def fake_geodesic_terms(stage_particles, U_state):
+        geodesic_Er_values.append(U_state[5][0])
+        stage_number = U_state[5][0]
+        return jnp.full_like(stage_particles.r, stage_number), jnp.zeros_like(stage_particles.ur)
+
+    def fake_lorentz_terms(stage_particles, U_state):
+        lorentz_Er_values.append(U_state[5][0])
+        return jnp.zeros_like(stage_particles.ur)
+
+    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+
+    particles = make_species(charge=1.0, mass=2.0)
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+    dt = 0.1
+
+    step_rk4(particles, r_grid, r_grid[1] - r_grid[0], dt)
+
+    assert len(metric_stage_positions) == 4
+    assert jnp.allclose(geodesic_Er_values, jnp.asarray([1.0, 2.0, 3.0, 4.0]))
+    assert jnp.allclose(lorentz_Er_values, jnp.asarray([1.0, 2.0, 3.0, 4.0]))
+    assert jnp.allclose(metric_stage_positions[0], jnp.asarray([0.25, 0.75]))
+    assert jnp.allclose(metric_stage_positions[1], jnp.asarray([0.30, 0.80]))
+    assert jnp.allclose(metric_stage_positions[2], jnp.asarray([0.35, 0.85]))
+    assert jnp.allclose(metric_stage_positions[3], jnp.asarray([0.55, 1.05]))
+
+
+def test_step_rk4_uses_classic_weighted_derivative_combination(monkeypatch):
+    derivative_calls = []
+
+    def fake_calculate_metric(stage_particles, r_grid, dr):
+        return None
+
+    def fake_geodesic_terms(stage_particles, U_state):
+        derivative_calls.append(
+            (
+                stage_particles.r.copy(),
+                stage_particles.phi.copy(),
+                stage_particles.ur.copy(),
+            )
+        )
+        dr_dt = stage_particles.r
+        dur_dt_GR = 2.0 * stage_particles.ur
+        return dr_dt, dur_dt_GR
+
+    def fake_lorentz_terms(stage_particles, U_state):
+        return jnp.zeros_like(stage_particles.ur)
+
+    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+
+    particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([1.0]),
+        ur=jnp.asarray([2.0]),
+        phi=jnp.asarray([0.0]),
+        uphi=jnp.asarray([0.0]),
+        shape_mode="nearest",
+    )
+    r_grid = jnp.linspace(0.0, 2.0, 5)
+    dt = 0.1
+
+    step_rk4(particles, r_grid, r_grid[1] - r_grid[0], dt)
+
+    r1, _, ur1 = derivative_calls[0]
+    r2, _, ur2 = derivative_calls[1]
+    r3, _, ur3 = derivative_calls[2]
+    r4, _, ur4 = derivative_calls[3]
+
+    expected_r = 1.0 + (dt / 6.0) * (r1 + 2.0 * r2 + 2.0 * r3 + r4)
+    expected_ur = 2.0 + (dt / 6.0) * (
+        2.0 * ur1 + 2.0 * (2.0 * ur2) + 2.0 * (2.0 * ur3) + 2.0 * ur4
+    )
+
+    assert len(derivative_calls) == 4
+    assert jnp.allclose(particles.r, expected_r)
+    assert jnp.allclose(particles.ur, expected_ur)
