@@ -307,9 +307,10 @@ def test_step_rk4_recomputes_stage_specific_metric_and_em_field(monkeypatch):
 
     step_rk4(particles, r_grid, r_grid[1] - r_grid[0], dt)
 
+
     assert len(metric_stage_positions) == 4
-    assert jnp.allclose(geodesic_Er_values, jnp.asarray([1.0, 2.0, 3.0, 4.0]))
-    assert jnp.allclose(lorentz_Er_values, jnp.asarray([1.0, 2.0, 3.0, 4.0]))
+    assert jnp.allclose( jnp.array(geodesic_Er_values), jnp.asarray([1.0, 2.0, 3.0, 4.0]))
+    assert jnp.allclose(jnp.array(lorentz_Er_values), jnp.asarray([1.0, 2.0, 3.0, 4.0]))
     assert jnp.allclose(metric_stage_positions[0], jnp.asarray([0.25, 0.75]))
     assert jnp.allclose(metric_stage_positions[1], jnp.asarray([0.30, 0.80]))
     assert jnp.allclose(metric_stage_positions[2], jnp.asarray([0.35, 0.85]))
