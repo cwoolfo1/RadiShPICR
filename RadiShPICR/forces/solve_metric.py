@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from RadiShPICR.deposition.charge_density import charge_density_at_point
 from RadiShPICR.deposition.mass_density import mass_density_at_point
 from RadiShPICR.forces.energy_momentum_tensor import Srr_at_point, Sr_at_point
+from RadiShPICR.forces.vacuum_conditions import rescale_metric_to_vacuum_boundary
 
 
 def _safe_radius(r, dr):
@@ -220,7 +221,7 @@ def calculate_metric(particles, r_grid, dr):
         jnp.asarray(Sr_values),
     )
 
-    return (
+    U_state = (
         jnp.asarray(A_values),
         jnp.asarray(phi_values),
         jnp.asarray(alpha_values),
@@ -230,3 +231,5 @@ def calculate_metric(particles, r_grid, dr):
         source_terms,
         r_grid,
     )
+
+    return rescale_metric_to_vacuum_boundary(U_state, particles)
