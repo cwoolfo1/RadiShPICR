@@ -226,6 +226,41 @@ def test_step_updates_current_particle_class_in_place_and_preserves_uphi():
     assert jnp.allclose(updated.uphi, initial_uphi)
 
 
+def test_step_freezes_particle_that_crosses_center(monkeypatch):
+    def fake_calculate_metric(stage_particles, r_grid, dr):
+        return None
+
+    def fake_geodesic_terms(stage_particles, U_state):
+        return -jnp.ones_like(stage_particles.r), jnp.zeros_like(stage_particles.ur)
+
+    def fake_lorentz_terms(stage_particles, U_state):
+        return jnp.zeros_like(stage_particles.ur)
+
+    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+
+    particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([0.05]),
+        ur=jnp.asarray([-1.0]),
+        phi=jnp.asarray([0.3]),
+        uphi=jnp.asarray([0.4]),
+        shape_mode="nearest",
+    )
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+
+    updated = step(particles, r_grid, r_grid[1] - r_grid[0], dt=0.1)
+
+    assert updated is particles
+    assert jnp.allclose(updated.r, 0.0)
+    assert jnp.allclose(updated.ur, 0.0)
+    assert jnp.allclose(updated.uphi, 0.0)
+
+
 def test_step_rk4_imports_as_additional_timestep_option():
     assert callable(step_rk4)
 
@@ -315,6 +350,84 @@ def test_step_rk4_recomputes_stage_specific_metric_and_em_field(monkeypatch):
     assert jnp.allclose(metric_stage_positions[1], jnp.asarray([0.30, 0.80]))
     assert jnp.allclose(metric_stage_positions[2], jnp.asarray([0.35, 0.85]))
     assert jnp.allclose(metric_stage_positions[3], jnp.asarray([0.55, 1.05]))
+
+
+def test_step_rk4_freezes_center_crossing_before_stage_metric_solves(monkeypatch):
+    metric_stage_positions = []
+
+    def fake_calculate_metric(stage_particles, r_grid, dr):
+        metric_stage_positions.append(stage_particles.r.copy())
+        return None
+
+    def fake_geodesic_terms(stage_particles, U_state):
+        return -jnp.ones_like(stage_particles.r), jnp.zeros_like(stage_particles.ur)
+
+    def fake_lorentz_terms(stage_particles, U_state):
+        return jnp.zeros_like(stage_particles.ur)
+
+    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+
+    particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([0.05]),
+        ur=jnp.asarray([-1.0]),
+        phi=jnp.asarray([0.0]),
+        uphi=jnp.asarray([0.2]),
+        shape_mode="nearest",
+    )
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+
+    step_rk4(particles, r_grid, r_grid[1] - r_grid[0], dt=0.2)
+
+    assert len(metric_stage_positions) == 4
+    assert all(jnp.all(stage_r >= 0.0) for stage_r in metric_stage_positions)
+    assert jnp.allclose(particles.r, 0.0)
+    assert jnp.allclose(particles.ur, 0.0)
+    assert jnp.allclose(particles.uphi, 0.0)
+
+
+def test_step_rk4_keeps_center_frozen_against_force_terms(monkeypatch):
+    metric_stage_positions = []
+
+    def fake_calculate_metric(stage_particles, r_grid, dr):
+        metric_stage_positions.append(stage_particles.r.copy())
+        return None
+
+    def fake_geodesic_terms(stage_particles, U_state):
+        return jnp.ones_like(stage_particles.r), jnp.ones_like(stage_particles.ur)
+
+    def fake_lorentz_terms(stage_particles, U_state):
+        return jnp.ones_like(stage_particles.ur)
+
+    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+
+    particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([0.0]),
+        ur=jnp.asarray([-1.0]),
+        phi=jnp.asarray([0.0]),
+        uphi=jnp.asarray([0.5]),
+        shape_mode="nearest",
+    )
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+
+    step_rk4(particles, r_grid, r_grid[1] - r_grid[0], dt=0.1)
+
+    assert len(metric_stage_positions) == 4
+    assert all(jnp.allclose(stage_r, 0.0) for stage_r in metric_stage_positions)
+    assert jnp.allclose(particles.r, 0.0)
+    assert jnp.allclose(particles.ur, 0.0)
+    assert jnp.allclose(particles.uphi, 0.0)
 
 
 def test_step_rk4_uses_classic_weighted_derivative_combination(monkeypatch):

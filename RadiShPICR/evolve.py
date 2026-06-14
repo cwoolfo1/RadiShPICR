@@ -1,10 +1,25 @@
+import jax.numpy as jnp
+
 from RadiShPICR.forces.geodesic import compute_geodesic_terms
 from RadiShPICR.forces.lorentz_force import compute_lorentz_terms
 from RadiShPICR.forces.solve_metric import calculate_metric
 from RadiShPICR.forces.utils import safe_radius
 
 
+def _freeze_center_particles(particles):
+    """Absorb particles that reach the regular center into an inert r = 0 state."""
+
+    center_particles = particles.r <= 0.0
+
+    particles.r = jnp.where(center_particles, 0.0, particles.r)
+    particles.ur = jnp.where(center_particles, 0.0, particles.ur)
+    particles.uphi = jnp.where(center_particles, 0.0, particles.uphi)
+
+    return particles
+
+
 def step(particles, r_grid, dr, dt):
+    particles = _freeze_center_particles(particles)
     U_state = calculate_metric(particles, r_grid, dr)
 
     dr_dt, dur_dt_GR = compute_geodesic_terms(particles, U_state)
@@ -13,17 +28,23 @@ def step(particles, r_grid, dr, dt):
 
     r, phi = particles.get_positions()
     ur, uphi = particles.get_velocities()
+    center_particles = r <= 0.0
+
+    dr_dt = jnp.where(center_particles, 0.0, dr_dt)
+    dur_dt = jnp.where(center_particles, 0.0, dur_dt)
 
     particles.r = r + dr_dt * dt
     particles.ur = ur + dur_dt * dt
     particles.phi = phi + uphi * dt / safe_radius(r, 0.5 * dr)
     particles.uphi = uphi
 
+    particles = _freeze_center_particles(particles)
+
     return particles
 
 
 def _copy_particle_state(particles, r, phi, ur):
-    return type(particles)(
+    stage_particles = type(particles)(
         name=particles.name,
         charge=particles.charges,
         mass=particles.masses,
@@ -35,20 +56,30 @@ def _copy_particle_state(particles, r, phi, ur):
         shape_mode=particles.shape_mode,
     )
 
+    return _freeze_center_particles(stage_particles)
+
 
 def _particle_derivatives(particles, r_grid, dr):
+    particles = _freeze_center_particles(particles)
     U_state = calculate_metric(particles, r_grid, dr)
     dr_dt, dur_dt_GR = compute_geodesic_terms(particles, U_state)
     dur_dt_EM = compute_lorentz_terms(particles, U_state)
 
     r, phi = particles.get_positions()
-    ur, uphi = particles.get_velocities()
+    _, uphi = particles.get_velocities()
     dphi_dt = uphi / safe_radius(r, 0.5 * dr)
+    center_particles = r <= 0.0
 
-    return dr_dt, dphi_dt, dur_dt_GR + dur_dt_EM
+    dr_dt = jnp.where(center_particles, 0.0, dr_dt)
+    dphi_dt = jnp.where(center_particles, 0.0, dphi_dt)
+    dur_dt = jnp.where(center_particles, 0.0, dur_dt_GR + dur_dt_EM)
+
+    return dr_dt, dphi_dt, dur_dt
 
 
 def step_rk4(particles, r_grid, dr, dt):
+    particles = _freeze_center_particles(particles)
+
     r0, phi0 = particles.get_positions()
     ur0, uphi0 = particles.get_velocities()
 
@@ -84,5 +115,7 @@ def step_rk4(particles, r_grid, dr, dt):
     )
     particles.ur = ur0 + (dt / 6.0) * (k1_ur + 2.0 * k2_ur + 2.0 * k3_ur + k4_ur)
     particles.uphi = uphi0
+
+    particles = _freeze_center_particles(particles)
 
     return particles
