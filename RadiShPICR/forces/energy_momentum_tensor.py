@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 
 from RadiShPICR.deposition.particle_shapes import shape_weights_at_point
+from RadiShPICR.forces.utils import pad_value
 
 
 def Sr_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):
@@ -10,7 +11,8 @@ def Sr_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):
 
     weights = shape_weights_at_point(r_particle, radial_coordinate, dr, particle_shape)
     safe_r = jnp.maximum(jnp.asarray(radial_coordinate, dtype=r_particle.dtype), 0.5 * dr)
-    cell_volume = 4.0 * jnp.pi * A_at_point**3 * safe_r**2 * dr
+    A_for_denominators = pad_value(A_at_point)
+    cell_volume = 4.0 * jnp.pi * A_for_denominators**3 * safe_r**2 * dr
 
     return jnp.sum(particles.get_mass() * weights * ur / cell_volume)
 
@@ -22,11 +24,12 @@ def Srr_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):
 
     weights = shape_weights_at_point(r_particle, radial_coordinate, dr, particle_shape)
     safe_r = jnp.maximum(jnp.asarray(radial_coordinate, dtype=r_particle.dtype), 0.5 * dr)
+    A_for_denominators = pad_value(A_at_point)
     lorentz_factor = jnp.sqrt(
         1.0
-        + ur**2 / A_at_point**2
-        + uphi**2 / (safe_r**2 * A_at_point**2)
+        + ur**2 / A_for_denominators**2
+        + uphi**2 / (safe_r**2 * A_for_denominators**2)
     )
-    cell_volume = 4.0 * jnp.pi * A_at_point**3 * safe_r**2 * dr
+    cell_volume = 4.0 * jnp.pi * A_for_denominators**3 * safe_r**2 * dr
 
     return jnp.sum(particles.get_mass() * weights * ur**2 / (cell_volume * lorentz_factor))

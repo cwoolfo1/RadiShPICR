@@ -124,3 +124,32 @@ def test_vacuum_rescale_matches_outer_boundary_cell():
     assert jnp.allclose(Er_matched, X_r * Er)
     assert jnp.allclose(Srr_matched, source_terms[2] * (X_r / X_t) ** 2)
     assert jnp.allclose(Sr_matched, source_terms[3] * X_r / X_t)
+
+
+def test_vacuum_rescale_pads_zero_lapse_rescaling_denominator():
+    particles = make_species(charge=0.0, mass=0.0, weight=0.0)
+    r_grid = jnp.asarray([0.0, 1.0, 2.0, 3.0])
+    A = jnp.ones_like(r_grid)
+    phi = jnp.zeros_like(r_grid)
+    alpha = jnp.asarray([1.0, 0.8, 0.4, 0.0])
+    Krr = jnp.zeros_like(r_grid)
+    beta_over_r = jnp.zeros_like(r_grid)
+    Er = jnp.zeros_like(r_grid)
+    source_terms = tuple(jnp.zeros_like(r_grid) for _ in range(4))
+    U_state = (A, phi, alpha, Krr, beta_over_r, Er, source_terms, r_grid)
+
+    matched = rescale_metric_to_vacuum_boundary(U_state, particles)
+    A_matched, phi_matched, alpha_matched, Krr_matched, beta_matched, Er_matched, matched_sources, r_matched = matched
+    mass_density, charge_density, Srr_matched, Sr_matched = matched_sources
+
+    assert jnp.all(jnp.isfinite(A_matched))
+    assert jnp.all(jnp.isfinite(phi_matched))
+    assert jnp.all(jnp.isfinite(alpha_matched))
+    assert jnp.all(jnp.isfinite(Krr_matched))
+    assert jnp.all(jnp.isfinite(beta_matched))
+    assert jnp.all(jnp.isfinite(Er_matched))
+    assert jnp.all(jnp.isfinite(mass_density))
+    assert jnp.all(jnp.isfinite(charge_density))
+    assert jnp.all(jnp.isfinite(Srr_matched))
+    assert jnp.all(jnp.isfinite(Sr_matched))
+    assert jnp.all(jnp.isfinite(r_matched))

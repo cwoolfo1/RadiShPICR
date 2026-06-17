@@ -1,12 +1,16 @@
 import jax.numpy as jnp
 
 import RadiShPICR.evolve as evolve
+from RadiShPICR.deposition.charge_density import charge_density_at_point
+from RadiShPICR.deposition.mass_density import mass_density_at_point
 from RadiShPICR.evolve import step, step_rk4
 from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
 from RadiShPICR.forces import calculate_metric
+from RadiShPICR.forces.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.forces.grid import RadialGrid
 from RadiShPICR.forces.geodesic import compute_geodesic_terms
 from RadiShPICR.forces.lorentz_force import compute_lorentz_terms
+from RadiShPICR.forces.utils import pad_value
 from RadiShPICR.particles import particle_species
 
 
@@ -49,6 +53,16 @@ def test_particle_species_current_api():
     assert species.get_charge() == 1.0
     assert species.get_mass() == 2.0
     assert species.get_shape() == "nearest"
+
+
+def test_pad_value_adds_small_denominator_offset_with_input_dtype():
+    values = jnp.asarray([0.0, 2.0], dtype=jnp.float32)
+
+    padded = pad_value(values)
+
+    assert padded.dtype == values.dtype
+    assert padded[0] == jnp.asarray(1.0e-15, dtype=values.dtype)
+    assert padded[1] == values[1] + jnp.asarray(1.0e-15, dtype=values.dtype)
 
 
 def test_calculate_metric_returns_grid_level_ustate_for_zero_source():
@@ -105,6 +119,35 @@ def test_force_terms_consume_ustate_directly():
     assert dr_dt.shape == particles.r.shape
     assert dur_dt_GR.shape == particles.r.shape
     assert dur_dt_EM.shape == particles.r.shape
+
+
+def test_source_terms_pad_zero_A_denominators():
+    particles = particle_species(
+        name="test",
+        charge=1.0,
+        mass=1.0,
+        weight=0.0,
+        r=jnp.asarray([0.25]),
+        ur=jnp.asarray([0.0]),
+        phi=jnp.asarray([0.0]),
+        uphi=jnp.asarray([0.0]),
+        shape_mode="nearest",
+    )
+    A_at_point = jnp.asarray(0.0)
+    radial_coordinate = jnp.asarray(0.25)
+    dr = jnp.asarray(0.25)
+
+    source_terms = jnp.asarray(
+        [
+            mass_density_at_point(particles, A_at_point, radial_coordinate, dr),
+            charge_density_at_point(particles, A_at_point, radial_coordinate, dr),
+            Srr_at_point(particles, A_at_point, radial_coordinate, dr),
+            Sr_at_point(particles, A_at_point, radial_coordinate, dr),
+        ]
+    )
+
+    assert jnp.all(jnp.isfinite(source_terms))
+    assert jnp.allclose(source_terms, 0.0)
 
 
 def test_lorentz_force_uses_particle_shape_interpolation_for_fields():
@@ -209,6 +252,37 @@ def test_geodesic_terms_use_particle_shape_interpolation_for_metric_fields():
     assert not jnp.allclose(expected_dr_dt, linear_dr_dt)
     assert jnp.allclose(dr_dt, expected_dr_dt)
     assert jnp.allclose(du_r_dt, 0.0)
+
+
+def test_geodesic_terms_pad_zero_A_denominators():
+    particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([0.25]),
+        ur=jnp.asarray([0.0]),
+        phi=jnp.asarray([0.0]),
+        uphi=jnp.asarray([0.0]),
+        shape_mode="nearest",
+    )
+    r_grid = jnp.asarray([0.0, 0.25, 0.50])
+    source_terms = tuple(jnp.zeros_like(r_grid) for _ in range(4))
+    U_state = (
+        jnp.zeros_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.ones_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.zeros_like(r_grid),
+        source_terms,
+        r_grid,
+    )
+
+    dr_dt, du_r_dt = compute_geodesic_terms(particles, U_state)
+
+    assert jnp.all(jnp.isfinite(dr_dt))
+    assert jnp.all(jnp.isfinite(du_r_dt))
 
 
 def test_step_updates_current_particle_class_in_place_and_preserves_uphi():

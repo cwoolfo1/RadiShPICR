@@ -11,6 +11,14 @@ def safe_radius(radius, epsilon):
     return jnp.maximum(radius, epsilon_value)
 
 
+@jax.jit
+def pad_value(value, padding=1.0e-15):
+    """Add a small offset before using metric values in denominators."""
+
+    padding_value = jnp.asarray(padding, dtype=value.dtype)
+    return value + padding_value
+
+
 
 def nearest_interior_index(radial_positions, grid):
     """Map particles to the nearest interior grid point.
@@ -22,4 +30,3 @@ def nearest_interior_index(radial_positions, grid):
     floating_index = (radial_positions - grid.r_full[0]) / grid.dr
     nearest = jnp.rint(floating_index).astype(jnp.int32)
     return jnp.clip(nearest, 1, grid.r_full.shape[0] - 2)
-

@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from RadiShPICR.deposition.charge_density import charge_density_at_point
 from RadiShPICR.deposition.mass_density import mass_density_at_point
 from RadiShPICR.forces.energy_momentum_tensor import Srr_at_point, Sr_at_point
+from RadiShPICR.forces.utils import pad_value
 from RadiShPICR.forces.vacuum_conditions import rescale_metric_to_vacuum_boundary
 
 
@@ -34,11 +35,14 @@ def dr_sqrt_phi(U_state, dr=None):
 def dr_alpha(U_state, dr=None):
     A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = U_state
     rho, charge_density, Srr, Sr = source_terms
+    A_for_denominators = pad_value(A)
 
     first_term = 4.0 * jnp.pi * alpha * Srr * r * A
     second_term = -2.0 * alpha * phi * jnp.sqrt(A)
     third_term = -2.0 * alpha * phi**2 * r
-    denominator = A * (1.0 + 2.0 * r * phi / jnp.sqrt(A))
+    denominator = A_for_denominators * (
+        1.0 + 2.0 * r * phi / jnp.sqrt(A_for_denominators)
+    )
 
     return (first_term + second_term + third_term) / denominator
 
@@ -46,8 +50,11 @@ def dr_alpha(U_state, dr=None):
 def Krr_from_state(U_state):
     A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = U_state
     rho, charge_density, Srr, Sr = source_terms
+    A_for_denominators = pad_value(A)
 
-    return 4.0 * jnp.pi * r * Sr / (1.0 + 2.0 * r * phi / jnp.sqrt(A))
+    return 4.0 * jnp.pi * r * Sr / (
+        1.0 + 2.0 * r * phi / jnp.sqrt(A_for_denominators)
+    )
 
 
 def dr_beta_over_r(U_state, dr=None):
@@ -59,9 +66,14 @@ def dr_beta_over_r(U_state, dr=None):
 def dr_Er(U_state, dr=None):
     A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = U_state
     rho, charge_density, Srr, Sr = source_terms
+    A_for_denominators = pad_value(A)
 
     safe_r = jnp.where(r == 0.0, 1.0, r) if dr is None else _safe_radius(r, dr)
-    interior_term = charge_density - 2.0 * Er / safe_r - 2.0 * phi * Er / jnp.sqrt(A)
+    interior_term = (
+        charge_density
+        - 2.0 * Er / safe_r
+        - 2.0 * phi * Er / jnp.sqrt(A_for_denominators)
+    )
     center_term = charge_density / 3.0
 
     return jnp.where(r == 0.0, center_term, interior_term)

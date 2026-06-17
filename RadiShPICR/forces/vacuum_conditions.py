@@ -1,5 +1,7 @@
 import jax.numpy as jnp
 
+from RadiShPICR.forces.utils import pad_value
+
 
 def total_particle_mass(particles):
     """Total macro-particle mass from the particle getter contract."""
@@ -25,7 +27,7 @@ def reissner_nordstrom_lapse(r, mass, charge):
     numerator = (1.0 - mass / (2.0 * r)) * (1.0 + mass / (2.0 * r))
     numerator = numerator + rQ**2 / (4.0 * r**2)
 
-    return numerator / reissner_nordstrom_A(r, mass, charge)
+    return numerator / pad_value(reissner_nordstrom_A(r, mass, charge))
 
 
 def vacuum_rescale_factors(A_outer, alpha_outer, r_outer, mass, charge):
@@ -61,17 +63,19 @@ def rescale_metric_to_vacuum_boundary(U_state, particles):
         mass,
         charge,
     )
+    X_r_for_denominators = pad_value(X_r)
+    X_t_for_denominators = pad_value(X_t)
 
-    A = A / X_r
-    phi = phi / X_r ** (3.0 / 2.0)
-    alpha = alpha / X_t
-    Krr = Krr * X_r**2 / X_t
-    beta_over_r = beta_over_r / X_t
+    A = A / X_r_for_denominators
+    phi = phi / X_r_for_denominators ** (3.0 / 2.0)
+    alpha = alpha / X_t_for_denominators
+    Krr = Krr * X_r**2 / X_t_for_denominators
+    beta_over_r = beta_over_r / X_t_for_denominators
     Er = X_r * Er
     r_grid = X_r * r_grid
 
-    Srr = Srr * (X_r / X_t) ** 2
-    Sr = Sr * X_r / X_t
+    Srr = Srr * (X_r / X_t_for_denominators) ** 2
+    Sr = Sr * X_r / X_t_for_denominators
     source_terms = (mass_density, charge_density, Srr, Sr)
 
     return (
