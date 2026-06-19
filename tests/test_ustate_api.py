@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 
 import RadiShPICR.evolve as evolve
@@ -108,6 +109,22 @@ def test_calculate_metric_returns_source_terms_for_nonzero_particles():
     assert jnp.any(charge_density > 0.0)
 
 
+def test_calculate_metric_uses_tail_integral_for_beta_over_r():
+    particles = make_species(charge=0.0, mass=1.0, weight=1.0)
+    r_grid = jnp.linspace(0.0, 1.0, 9)
+    dr = r_grid[1] - r_grid[0]
+
+    U_state = calculate_metric(particles, r_grid, dr)
+    _, _, alpha, Krr, beta_over_r, _, _, returned_grid = U_state
+
+    integrand = jnp.where(returned_grid == 0.0, 0.0, alpha * Krr / returned_grid)
+    expected_beta_over_r = -jnp.cumsum((integrand * dr)[::-1])[::-1]
+
+    assert jnp.all(jnp.isfinite(beta_over_r))
+    assert jnp.any(jnp.abs(Krr) > 0.0)
+    assert jnp.allclose(beta_over_r, expected_beta_over_r)
+
+
 def test_force_terms_consume_ustate_directly():
     particles = make_species(charge=1.0, mass=2.0)
     r_grid = jnp.linspace(0.0, 1.0, 5)
@@ -119,6 +136,87 @@ def test_force_terms_consume_ustate_directly():
     assert dr_dt.shape == particles.r.shape
     assert dur_dt_GR.shape == particles.r.shape
     assert dur_dt_EM.shape == particles.r.shape
+
+
+def test_force_terms_jit_match_eager_outputs():
+    particles = make_species(charge=1.0, mass=2.0)
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+    source_terms = tuple(jnp.zeros_like(r_grid) for _ in range(4))
+    U_state = (
+        jnp.ones_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.ones_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.zeros_like(r_grid),
+        jnp.linspace(0.0, 0.2, r_grid.shape[0]),
+        source_terms,
+        r_grid,
+    )
+
+    eager_geodesic = compute_geodesic_terms(particles, U_state)
+    eager_lorentz = compute_lorentz_terms(particles, U_state)
+    jitted_geodesic = jax.jit(compute_geodesic_terms)(particles, U_state)
+    jitted_lorentz = jax.jit(compute_lorentz_terms)(particles, U_state)
+
+    assert jnp.allclose(jitted_geodesic[0], eager_geodesic[0])
+    assert jnp.allclose(jitted_geodesic[1], eager_geodesic[1])
+    assert jnp.allclose(jitted_lorentz, eager_lorentz)
+
+
+def test_calculate_metric_jit_matches_eager_output():
+    particles = make_species(charge=0.0, mass=1.0, weight=0.0)
+    r_grid = jnp.linspace(0.0, 1.0, 5)
+    dr = r_grid[1] - r_grid[0]
+
+    eager_U_state = calculate_metric(particles, r_grid, dr)
+    jitted_U_state = jax.jit(calculate_metric)(particles, r_grid, dr)
+
+    assert jnp.allclose(jitted_U_state[0], eager_U_state[0])
+    assert jnp.allclose(jitted_U_state[1], eager_U_state[1])
+    assert jnp.allclose(jitted_U_state[2], eager_U_state[2])
+    assert jnp.allclose(jitted_U_state[3], eager_U_state[3])
+    assert jnp.allclose(jitted_U_state[4], eager_U_state[4])
+    assert jnp.allclose(jitted_U_state[5], eager_U_state[5])
+    for jitted_source, eager_source in zip(jitted_U_state[6], eager_U_state[6]):
+        assert jnp.allclose(jitted_source, eager_source)
+    assert jnp.allclose(jitted_U_state[7], eager_U_state[7])
+
+
+def test_step_rk4_jit_matches_eager_output():
+    eager_particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([2.5, 7.5]),
+        ur=jnp.asarray([0.01, -0.01]),
+        phi=jnp.asarray([0.0, 0.2]),
+        uphi=jnp.asarray([0.0, 0.0]),
+        shape_mode="nearest",
+    )
+    jitted_particles = particle_species(
+        name="test",
+        charge=0.0,
+        mass=1.0,
+        weight=1.0,
+        r=jnp.asarray([2.5, 7.5]),
+        ur=jnp.asarray([0.01, -0.01]),
+        phi=jnp.asarray([0.0, 0.2]),
+        uphi=jnp.asarray([0.0, 0.0]),
+        shape_mode="nearest",
+    )
+    r_grid = jnp.linspace(0.0, 10.0, 9)
+    dr = r_grid[1] - r_grid[0]
+    dt = 1.0e-4
+
+    eager_result = step_rk4(eager_particles, r_grid, dr, dt)
+    jitted_result = jax.jit(step_rk4)(jitted_particles, r_grid, dr, dt)
+
+    assert jnp.all(jnp.isfinite(jitted_result.r))
+    assert jnp.allclose(jitted_result.r, eager_result.r)
+    assert jnp.allclose(jitted_result.phi, eager_result.phi)
+    assert jnp.allclose(jitted_result.ur, eager_result.ur)
+    assert jnp.allclose(jitted_result.uphi, eager_result.uphi)
 
 
 def test_source_terms_pad_zero_A_denominators():

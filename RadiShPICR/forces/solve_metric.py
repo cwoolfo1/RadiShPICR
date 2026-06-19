@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+from jax import lax
 
 from RadiShPICR.deposition.charge_density import charge_density_at_point
 from RadiShPICR.deposition.mass_density import mass_density_at_point
@@ -63,6 +64,15 @@ def dr_beta_over_r(U_state, dr=None):
     return jnp.where(r == 0.0, 0.0, alpha * Krr_from_state(U_state) / safe_r)
 
 
+def beta_over_r_from_integral(alpha, Krr, r, dr):
+    """Shift condition solved as a tail integral after the radial Heun solve."""
+
+    safe_r = jnp.where(r == 0.0, 1.0, r)
+    integrand = jnp.where(r == 0.0, 0.0, alpha * Krr / safe_r)
+
+    return -jnp.cumsum((integrand * dr)[::-1])[::-1]
+
+
 def dr_Er(U_state, dr=None):
     A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = U_state
     rho, charge_density, Srr, Sr = source_terms
@@ -107,16 +117,13 @@ def heuns_method(U_state, dr, particles):
     Krr_predictor = Krr_from_state(
         (A_predictor, phi_predictor, alpha_predictor, Krr, beta_over_r, Er_predictor, source_terms_predictor, r_predictor)
     )
-    beta_over_r_predictor = dr_beta_over_r(
-        (A_predictor, phi_predictor, alpha_predictor, Krr_predictor, beta_over_r, Er_predictor, source_terms_predictor, r_predictor),
-        dr,
-    )
+
     predictor_state = (
         A_predictor,
         phi_predictor,
         alpha_predictor,
         Krr_predictor,
-        beta_over_r_predictor,
+        beta_over_r,
         Er_predictor,
         source_terms_predictor,
         r_predictor,
@@ -146,26 +153,13 @@ def heuns_method(U_state, dr, particles):
             r_predictor,
         )
     )
-    beta_over_r_corrected = dr_beta_over_r(
-        (
-            A_corrected,
-            phi_corrected,
-            alpha_corrected,
-            Krr_corrected,
-            beta_over_r,
-            Er_corrected,
-            source_terms_corrected,
-            r_predictor,
-        ),
-        dr,
-    )
 
     return (
         A_corrected,
         phi_corrected,
         alpha_corrected,
         Krr_corrected,
-        beta_over_r_corrected,
+        beta_over_r,
         Er_corrected,
         source_terms_corrected,
         r_predictor,
@@ -196,52 +190,97 @@ def calculate_metric(particles, r_grid, dr):
         initial_r,
     )
 
-    A_values = []
-    phi_values = []
-    alpha_values = []
-    Krr_values = []
-    beta_over_r_values = []
-    Er_values = []
-    mass_density_values = []
-    charge_density_values = []
-    Srr_values = []
-    Sr_values = []
-
-    for grid_index in range(r_grid.shape[0]):
-        if grid_index > 0:
-            local_dr = r_grid[grid_index] - r_grid[grid_index - 1]
-            state = heuns_method(state, local_dr, particles)
-
+    def radial_step(state, local_dr):
+        state = heuns_method(state, local_dr, particles)
         A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = state
         mass_density, charge_density, Srr, Sr = source_terms
 
-        A_values.append(A)
-        phi_values.append(phi)
-        alpha_values.append(alpha)
-        Krr_values.append(Krr)
-        beta_over_r_values.append(beta_over_r)
-        Er_values.append(Er)
-        mass_density_values.append(mass_density)
-        charge_density_values.append(charge_density)
-        Srr_values.append(Srr)
-        Sr_values.append(Sr)
+        values = (
+            A,
+            phi,
+            alpha,
+            Krr,
+            beta_over_r,
+            Er,
+            mass_density,
+            charge_density,
+            Srr,
+            Sr,
+            r,
+        )
+
+        return state, values
+
+    local_dr_values = r_grid[1:] - r_grid[:-1]
+    _, scanned_values = lax.scan(radial_step, state, local_dr_values)
+    (
+        scanned_A,
+        scanned_phi,
+        scanned_alpha,
+        scanned_Krr,
+        scanned_beta_over_r,
+        scanned_Er,
+        scanned_mass_density,
+        scanned_charge_density,
+        scanned_Srr,
+        scanned_Sr,
+        scanned_r,
+    ) = scanned_values
+
+    (
+        initial_A,
+        initial_phi,
+        initial_alpha,
+        initial_Krr,
+        initial_beta_over_r,
+        initial_Er,
+        initial_source_terms,
+        initial_r,
+    ) = state
+    initial_mass_density, initial_charge_density, initial_Srr, initial_Sr = (
+        initial_source_terms
+    )
+
+    A_values = jnp.concatenate((initial_A[jnp.newaxis], scanned_A))
+    phi_values = jnp.concatenate((initial_phi[jnp.newaxis], scanned_phi))
+    alpha_values = jnp.concatenate((initial_alpha[jnp.newaxis], scanned_alpha))
+    Krr_values = jnp.concatenate((initial_Krr[jnp.newaxis], scanned_Krr))
+    beta_over_r_values = jnp.concatenate(
+        (initial_beta_over_r[jnp.newaxis], scanned_beta_over_r)
+    )
+    Er_values = jnp.concatenate((initial_Er[jnp.newaxis], scanned_Er))
+    mass_density_values = jnp.concatenate(
+        (initial_mass_density[jnp.newaxis], scanned_mass_density)
+    )
+    charge_density_values = jnp.concatenate(
+        (initial_charge_density[jnp.newaxis], scanned_charge_density)
+    )
+    Srr_values = jnp.concatenate((initial_Srr[jnp.newaxis], scanned_Srr))
+    Sr_values = jnp.concatenate((initial_Sr[jnp.newaxis], scanned_Sr))
 
     source_terms = (
-        jnp.asarray(mass_density_values),
-        jnp.asarray(charge_density_values),
-        jnp.asarray(Srr_values),
-        jnp.asarray(Sr_values),
+        mass_density_values,
+        charge_density_values,
+        Srr_values,
+        Sr_values,
+    )
+    r_values = jnp.concatenate((initial_r[jnp.newaxis], scanned_r))
+    beta_over_r_values = beta_over_r_from_integral(
+        alpha_values,
+        Krr_values,
+        r_values,
+        dr,
     )
 
     U_state = (
-        jnp.asarray(A_values),
-        jnp.asarray(phi_values),
-        jnp.asarray(alpha_values),
-        jnp.asarray(Krr_values),
-        jnp.asarray(beta_over_r_values),
-        jnp.asarray(Er_values),
+        A_values,
+        phi_values,
+        alpha_values,
+        Krr_values,
+        beta_over_r_values,
+        Er_values,
         source_terms,
-        r_grid,
+        r_values,
     )
 
     return rescale_metric_to_vacuum_boundary(U_state, particles)
