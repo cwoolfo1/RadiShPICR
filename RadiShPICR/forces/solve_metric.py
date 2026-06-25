@@ -70,7 +70,15 @@ def beta_over_r_from_integral(alpha, Krr, r, dr):
     safe_r = jnp.where(r == 0.0, 1.0, r)
     integrand = jnp.where(r == 0.0, 0.0, alpha * Krr / safe_r)
 
-    return -jnp.cumsum((integrand * dr)[::-1])[::-1]
+    trapezoid_segments = 0.5 * (integrand[:-1] + integrand[1:]) * (r[1:] - r[:-1])
+    tail_integral = jnp.concatenate(
+        (
+            jnp.cumsum(trapezoid_segments[::-1])[::-1],
+            jnp.zeros_like(integrand[-1:]),
+        )
+    )
+
+    return -tail_integral
 
 
 def dr_Er(U_state, dr=None):

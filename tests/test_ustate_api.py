@@ -11,6 +11,7 @@ from RadiShPICR.forces.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.forces.grid import RadialGrid
 from RadiShPICR.forces.geodesic import compute_geodesic_terms
 from RadiShPICR.forces.lorentz_force import compute_lorentz_terms
+from RadiShPICR.forces.solve_metric import beta_over_r_from_integral
 from RadiShPICR.forces.utils import pad_value
 from RadiShPICR.particles import particle_species
 
@@ -109,19 +110,28 @@ def test_calculate_metric_returns_source_terms_for_nonzero_particles():
     assert jnp.any(charge_density > 0.0)
 
 
-def test_calculate_metric_uses_tail_integral_for_beta_over_r():
-    particles = make_species(charge=0.0, mass=1.0, weight=1.0)
-    r_grid = jnp.linspace(0.0, 1.0, 9)
+def test_beta_over_r_uses_trapezoidal_tail_integral():
+    r_grid = jnp.asarray([0.0, 0.10, 0.25, 0.55, 1.0])
     dr = r_grid[1] - r_grid[0]
+    alpha = jnp.asarray([1.0, 1.1, 1.2, 1.3, 1.4])
+    Krr = r_grid * jnp.asarray([0.0, 0.3, 0.5, 0.7, 0.9])
 
-    U_state = calculate_metric(particles, r_grid, dr)
-    _, _, alpha, Krr, beta_over_r, _, _, returned_grid = U_state
+    beta_over_r = beta_over_r_from_integral(alpha, Krr, r_grid, dr)
 
-    integrand = jnp.where(returned_grid == 0.0, 0.0, alpha * Krr / returned_grid)
-    expected_beta_over_r = -jnp.cumsum((integrand * dr)[::-1])[::-1]
+    integrand = jnp.where(r_grid == 0.0, 0.0, alpha * Krr / r_grid)
+    trapezoid_segments = 0.5 * (integrand[:-1] + integrand[1:]) * (
+        r_grid[1:] - r_grid[:-1]
+    )
+    expected_tail_integral = jnp.concatenate(
+        (
+            jnp.cumsum(trapezoid_segments[::-1])[::-1],
+            jnp.zeros_like(integrand[-1:]),
+        )
+    )
+    expected_beta_over_r = -expected_tail_integral
 
     assert jnp.all(jnp.isfinite(beta_over_r))
-    assert jnp.any(jnp.abs(Krr) > 0.0)
+    assert beta_over_r[-1] == 0.0
     assert jnp.allclose(beta_over_r, expected_beta_over_r)
 
 
