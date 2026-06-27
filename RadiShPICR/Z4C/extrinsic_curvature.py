@@ -51,7 +51,7 @@ def dKhdt(metric: Z4C_Metric, matter_terms):
     dKhdt += 4 * jnp.pi * alpha * rho
     dKhdt += (4 * jnp.pi * alpha * Srr * chi) / grr
     dKhdt += (8 * jnp.pi * alpha * St * chi) / gt
-    dKhdt += -(2 * chi * dalphadr) / (matter_terms.r * grr)
+    dKhdt += -(2 * chi * dalphadr) / (metric.r * grr)
     dKhdt += (chi * dgrrdr * dalphadr) / (2 * (grr ** 2))
     dKhdt += -(chi * dgtdr * dalphadr) / (grr * gt)
     dKhdt += beta * dKhdr
