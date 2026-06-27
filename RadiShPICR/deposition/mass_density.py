@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 
 from RadiShPICR.deposition.particle_shapes import shape_weights_at_point
-from RadiShPICR.forces.utils import pad_value
+from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
 
 
 def mass_density_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):

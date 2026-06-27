@@ -1,9 +1,9 @@
 import jax.numpy as jnp
 
 from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
-from RadiShPICR.forces.grid import RadialGrid
-from RadiShPICR.forces.solve_metric import dr_A, dr_alpha, dr_beta_over_r
-from RadiShPICR.forces.utils import pad_value, safe_radius
+from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
+from RadiShPICR.ConstraintBasedRelativity.solve_metric import dr_A, dr_alpha, dr_beta_over_r
+from RadiShPICR.ConstraintBasedRelativity.utils import pad_value, safe_radius
 
 
 def _field_interpolation_grid(r_grid):

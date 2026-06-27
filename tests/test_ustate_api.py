@@ -6,13 +6,13 @@ from RadiShPICR.deposition.charge_density import charge_density_at_point
 from RadiShPICR.deposition.mass_density import mass_density_at_point
 from RadiShPICR.evolve import step, step_rk4
 from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
-from RadiShPICR.forces import calculate_metric
-from RadiShPICR.forces.energy_momentum_tensor import Srr_at_point, Sr_at_point
-from RadiShPICR.forces.grid import RadialGrid
-from RadiShPICR.forces.geodesic import compute_geodesic_terms
-from RadiShPICR.forces.lorentz_force import compute_lorentz_terms
-from RadiShPICR.forces.solve_metric import beta_over_r_from_integral
-from RadiShPICR.forces.utils import pad_value
+from RadiShPICR.ConstraintBasedRelativity import calculate_metric
+from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
+from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
+from RadiShPICR.ConstraintBasedRelativity.geodesic import compute_geodesic_terms
+from RadiShPICR.ConstraintBasedRelativity.lorentz_force import compute_lorentz_terms
+from RadiShPICR.ConstraintBasedRelativity.solve_metric import beta_over_r_from_integral
+from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
 from RadiShPICR.particles import particle_species
 
 

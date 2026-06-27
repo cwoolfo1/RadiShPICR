@@ -3,7 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from RadiShPICR.forces.utils import nearest_interior_index
+from RadiShPICR.ConstraintBasedRelativity.utils import nearest_interior_index
 
 
 

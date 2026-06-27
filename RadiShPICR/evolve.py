@@ -1,9 +1,9 @@
 import jax.numpy as jnp
 
-from RadiShPICR.forces.geodesic import compute_geodesic_terms
-from RadiShPICR.forces.lorentz_force import compute_lorentz_terms
-from RadiShPICR.forces.solve_metric import calculate_metric
-from RadiShPICR.forces.utils import safe_radius
+from RadiShPICR.ConstraintBasedRelativity.geodesic import compute_geodesic_terms
+from RadiShPICR.ConstraintBasedRelativity.lorentz_force import compute_lorentz_terms
+from RadiShPICR.ConstraintBasedRelativity.solve_metric import calculate_metric
+from RadiShPICR.ConstraintBasedRelativity.utils import safe_radius
 
 
 def _freeze_center_particles(particles):

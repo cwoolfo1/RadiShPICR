@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 
 from RadiShPICR.particles import particle_species
-from RadiShPICR.forces.vacuum_conditions import (
+from RadiShPICR.ConstraintBasedRelativity.vacuum_conditions import (
     reissner_nordstrom_A,
     reissner_nordstrom_lapse,
     rescale_metric_to_vacuum_boundary,

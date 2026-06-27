@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from RadiShPICR.forces.utils import pad_value
+from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
 
 
 def total_particle_mass(particles):
