@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from RadiShPICR.deposition.particle_shapes import shape_weights_at_point
+from RadiShPICR.particles.particle_shapes import shape_weights_at_point
 from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
 
 

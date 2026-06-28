@@ -1,4 +1,4 @@
-from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
+from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
 from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
 
 

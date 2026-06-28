@@ -5,7 +5,7 @@ import RadiShPICR.evolve as evolve
 from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
 from RadiShPICR.evolve import step, step_rk4
-from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
+from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
 from RadiShPICR.ConstraintBasedRelativity import calculate_metric
 from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid

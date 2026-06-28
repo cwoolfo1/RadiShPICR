@@ -3,8 +3,8 @@ from typing import NamedTuple
 import jax.numpy as jnp
 
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
-from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
-from RadiShPICR.deposition.particle_shapes import shape_weights_at_point
+from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
+from RadiShPICR.particles.particle_shapes import shape_weights_at_point
 
 class MatterTerms(NamedTuple):
     rho: jnp.ndarray
