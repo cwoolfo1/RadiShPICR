@@ -1,8 +1,8 @@
 import jax.numpy as jnp
 from jax import lax
 
-from RadiShPICR.deposition.charge_density import charge_density_at_point
-from RadiShPICR.deposition.mass_density import mass_density_at_point
+from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_at_point
+from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
 from RadiShPICR.ConstraintBasedRelativity.vacuum_conditions import rescale_metric_to_vacuum_boundary

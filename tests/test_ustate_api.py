@@ -2,8 +2,8 @@ import jax
 import jax.numpy as jnp
 
 import RadiShPICR.evolve as evolve
-from RadiShPICR.deposition.charge_density import charge_density_at_point
-from RadiShPICR.deposition.mass_density import mass_density_at_point
+from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_at_point
+from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
 from RadiShPICR.evolve import step, step_rk4
 from RadiShPICR.deposition.particle_shapes import interpolate_field_to_particles
 from RadiShPICR.ConstraintBasedRelativity import calculate_metric
