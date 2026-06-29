@@ -5,7 +5,7 @@ from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative
 
-def compute_geodesic_terms(particles, metric: Z4C_Metric, dt: float):
+def compute_geodesic_terms(particles, metric: Z4C_Metric):
     r_particle, _ = particles.get_positions()
     ur, uphi = particles.get_velocities()
     particle_shape = particles.get_shape()
