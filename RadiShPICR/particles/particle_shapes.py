@@ -3,8 +3,19 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from RadiShPICR.ConstraintBasedRelativity.utils import nearest_interior_index
+# from RadiShPICR.ConstraintBasedRelativity.utils import nearest_interior_index
 
+
+def nearest_interior_index(radial_positions, grid):
+    """Map particles to the nearest interior grid point.
+
+    The two edge cells are reserved as vacuum boundary cells, so matter is only
+    deposited on indices `1` through `N-2`.
+    """
+
+    floating_index = (radial_positions - grid.r_full[0]) / grid.dr
+    nearest = jnp.rint(floating_index).astype(jnp.int32)
+    return jnp.clip(nearest, 1, grid.r_full.shape[0] - 2)
 
 
 @partial(jax.jit, static_argnames=("shape_mode",))
