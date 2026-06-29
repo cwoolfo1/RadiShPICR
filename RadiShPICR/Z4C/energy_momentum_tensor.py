@@ -58,7 +58,7 @@ def relativistic_mass_energy_density(particles, metric: Z4C_Metric):
     # unpack metric components
 
 
-    scaling_factor = jnp.sqrt( conformal_grr * conformal_gt**2 / chi**3 )
+    scaling_factor = jnp.sqrt( 1 / chi**3 )
     # compute the scaling factor for the energy density based on the metric components
     scaling_factor_p = interpolate_field_to_particles(scaling_factor, r_particle, r, dr, particle_shape)
     # interpolate the scaling factor to particle positions
@@ -97,7 +97,7 @@ def compute_radial_momentum_density(particles, metric: Z4C_Metric):
     weights = shape_weights_at_point(r_particle, r, dr, particle_shape)
     # compute the shape weights for each particle based on its position and the grid points
 
-    scaling_factor = jnp.sqrt( conformal_grr * conformal_gt**2 / chi**3 )
+    scaling_factor = jnp.sqrt( 1 / chi**3 )
     # compute the scaling factor for the energy density based on the metric components
     scaling_factor_p = interpolate_field_to_particles(scaling_factor, r_particle, r, dr, particle_shape)
     # interpolate the scaling factor to particle positions
@@ -123,7 +123,7 @@ def compute_radial_stress_tensor_component(particles, metric: Z4C_Metric):
     weights = shape_weights_at_point(r_particle, r, dr, particle_shape)
     # compute the shape weights for each particle based on its position and the grid points
 
-    scaling_factor = jnp.sqrt( conformal_grr * conformal_gt**2 / chi**3 )
+    scaling_factor = jnp.sqrt( 1 / chi**3 )
     # compute the scaling factor for the energy density based on the metric components
     scaling_factor_p = interpolate_field_to_particles(scaling_factor, r_particle, r, dr, particle_shape)
     # interpolate the scaling factor to particle positions
