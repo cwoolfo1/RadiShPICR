@@ -1,10 +1,10 @@
 import jax
 import jax.numpy as jnp
 
-import RadiShPICR.evolve as evolve
+import RadiShPICR.ConstraintBasedRelativity.evolve as constraint_evolve
 from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
-from RadiShPICR.evolve import step, step_rk4
+from RadiShPICR.ConstraintBasedRelativity.evolve import step, step_rk4
 from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
 from RadiShPICR.ConstraintBasedRelativity import calculate_metric
 from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
@@ -418,9 +418,9 @@ def test_step_freezes_particle_that_crosses_center(monkeypatch):
     def fake_lorentz_terms(stage_particles, U_state):
         return jnp.zeros_like(stage_particles.ur)
 
-    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
-    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
-    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+    monkeypatch.setattr(constraint_evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(constraint_evolve, "compute_lorentz_terms", fake_lorentz_terms)
 
     particles = particle_species(
         name="test",
@@ -460,9 +460,9 @@ def test_step_rk4_updates_current_particle_class_in_place_and_preserves_uphi(mon
     def fake_lorentz_terms(stage_particles, U_state):
         return jnp.full_like(stage_particles.ur, 0.25)
 
-    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
-    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
-    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+    monkeypatch.setattr(constraint_evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(constraint_evolve, "compute_lorentz_terms", fake_lorentz_terms)
 
     particles = make_species(charge=1.0, mass=2.0)
     initial_r = particles.r.copy()
@@ -514,9 +514,9 @@ def test_step_rk4_recomputes_stage_specific_metric_and_em_field(monkeypatch):
         lorentz_Er_values.append(U_state[5][0])
         return jnp.zeros_like(stage_particles.ur)
 
-    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
-    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
-    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+    monkeypatch.setattr(constraint_evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(constraint_evolve, "compute_lorentz_terms", fake_lorentz_terms)
 
     particles = make_species(charge=1.0, mass=2.0)
     r_grid = jnp.linspace(0.0, 1.0, 5)
@@ -547,9 +547,9 @@ def test_step_rk4_freezes_center_crossing_before_stage_metric_solves(monkeypatch
     def fake_lorentz_terms(stage_particles, U_state):
         return jnp.zeros_like(stage_particles.ur)
 
-    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
-    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
-    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+    monkeypatch.setattr(constraint_evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(constraint_evolve, "compute_lorentz_terms", fake_lorentz_terms)
 
     particles = particle_species(
         name="test",
@@ -586,9 +586,9 @@ def test_step_rk4_keeps_center_frozen_against_force_terms(monkeypatch):
     def fake_lorentz_terms(stage_particles, U_state):
         return jnp.ones_like(stage_particles.ur)
 
-    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
-    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
-    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+    monkeypatch.setattr(constraint_evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(constraint_evolve, "compute_lorentz_terms", fake_lorentz_terms)
 
     particles = particle_species(
         name="test",
@@ -633,9 +633,9 @@ def test_step_rk4_uses_classic_weighted_derivative_combination(monkeypatch):
     def fake_lorentz_terms(stage_particles, U_state):
         return jnp.zeros_like(stage_particles.ur)
 
-    monkeypatch.setattr(evolve, "calculate_metric", fake_calculate_metric)
-    monkeypatch.setattr(evolve, "compute_geodesic_terms", fake_geodesic_terms)
-    monkeypatch.setattr(evolve, "compute_lorentz_terms", fake_lorentz_terms)
+    monkeypatch.setattr(constraint_evolve, "calculate_metric", fake_calculate_metric)
+    monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
+    monkeypatch.setattr(constraint_evolve, "compute_lorentz_terms", fake_lorentz_terms)
 
     particles = particle_species(
         name="test",
