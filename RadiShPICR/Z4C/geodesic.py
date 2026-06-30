@@ -2,8 +2,20 @@ import jax.numpy as jnp
 import jax
 
 from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
+from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative
+
+
+def _radial_grid_from_metric(metric: Z4C_Metric):
+    return RadialGrid(
+        r_full=metric.r,
+        r_interior=metric.r,
+        dr=metric.dr,
+        epsilon=0.5 * metric.dr,
+        r_max=metric.r[-1],
+    )
+
 
 def compute_geodesic_terms(particles, metric: Z4C_Metric):
     r_particle, _ = particles.get_positions()
@@ -23,6 +35,7 @@ def compute_geodesic_terms(particles, metric: Z4C_Metric):
     r = metric.r
     dr = metric.dr
     # unpack metric components
+    grid = _radial_grid_from_metric(metric)
 
     dalphadr = first_derivative(alpha, dr)
     dbetadr = first_derivative(beta, dr)
@@ -31,19 +44,19 @@ def compute_geodesic_terms(particles, metric: Z4C_Metric):
     dgtdr = first_derivative(conformal_gt, dr)
     # compute derivatives of the metric functions using finite difference methods
 
-    grr_p = interpolate_field_to_particles(conformal_grr, r, r_particle, particle_shape)
-    gt_p = interpolate_field_to_particles(conformal_gt, r, r_particle, particle_shape)
-    alpha_p = interpolate_field_to_particles(alpha, r, r_particle, particle_shape)
-    beta_p = interpolate_field_to_particles(beta, r, r_particle, particle_shape)
-    chi_p = interpolate_field_to_particles(chi, r, r_particle, particle_shape)
-    Arr_p = interpolate_field_to_particles(Arr, r, r_particle, particle_shape)
-    At_p = interpolate_field_to_particles(At, r, r_particle, particle_shape)
-    KTh_p = interpolate_field_to_particles(KTh, r, r_particle, particle_shape)
-    dalphadr_p = interpolate_field_to_particles(dalphadr, r, r_particle, particle_shape)
-    dbetadr_p = interpolate_field_to_particles(dbetadr, r, r_particle, particle_shape)
-    dchidr_p = interpolate_field_to_particles(dchidr, r, r_particle, particle_shape)
-    dgrrdr_p = interpolate_field_to_particles(dgrrdr, r, r_particle, particle_shape)
-    dgtdr_p = interpolate_field_to_particles(dgtdr, r, r_particle, particle_shape)
+    grr_p = interpolate_field_to_particles(conformal_grr, r_particle, grid, shape_mode=particle_shape)
+    gt_p = interpolate_field_to_particles(conformal_gt, r_particle, grid, shape_mode=particle_shape)
+    alpha_p = interpolate_field_to_particles(alpha, r_particle, grid, shape_mode=particle_shape)
+    beta_p = interpolate_field_to_particles(beta, r_particle, grid, shape_mode=particle_shape)
+    chi_p = interpolate_field_to_particles(chi, r_particle, grid, shape_mode=particle_shape)
+    Arr_p = interpolate_field_to_particles(Arr, r_particle, grid, shape_mode=particle_shape)
+    At_p = interpolate_field_to_particles(At, r_particle, grid, shape_mode=particle_shape)
+    KTh_p = interpolate_field_to_particles(KTh, r_particle, grid, shape_mode=particle_shape)
+    dalphadr_p = interpolate_field_to_particles(dalphadr, r_particle, grid, shape_mode=particle_shape)
+    dbetadr_p = interpolate_field_to_particles(dbetadr, r_particle, grid, shape_mode=particle_shape)
+    dchidr_p = interpolate_field_to_particles(dchidr, r_particle, grid, shape_mode=particle_shape)
+    dgrrdr_p = interpolate_field_to_particles(dgrrdr, r_particle, grid, shape_mode=particle_shape)
+    dgtdr_p = interpolate_field_to_particles(dgtdr, r_particle, grid, shape_mode=particle_shape)
     # interpolate metric functions and their derivatives to particle
 
     #    1/(6 \[Chi][t, r])
