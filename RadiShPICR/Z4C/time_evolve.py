@@ -7,6 +7,7 @@ from RadiShPICR.Z4C.spatial_metric import dchidt, dgrrdt, dgtdt
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 from RadiShPICR.Z4C.energy_momentum_tensor import compute_radial_matter_terms
 from RadiShPICR.Z4C.geodesic import compute_geodesic_terms
+from RadiShPICR.Z4C.utils import trace_free_curvature
 
 
 def metric_time_derivatives(metric: Z4C_Metric, matter_terms):
@@ -33,6 +34,12 @@ def metric_time_derivatives(metric: Z4C_Metric, matter_terms):
 
 
 def _add_metric_derivative(metric, derivative, scale):
+
+    Arr = metric.Arr + scale * derivative.Arr
+    At = metric.At + scale * derivative.At
+    Arr_trace_free, At_trace_free = trace_free_curvature(Arr, At, metric)
+    # compute the trace-free parts of the curvature after adding the scaled derivative
+
     return Z4C_Metric(
         alpha=metric.alpha + scale * derivative.alpha,
         beta=metric.beta + scale * derivative.beta,
@@ -40,8 +47,8 @@ def _add_metric_derivative(metric, derivative, scale):
         conformal_gt=metric.conformal_gt + scale * derivative.conformal_gt,
         chi=metric.chi + scale * derivative.chi,
         Kh=metric.Kh + scale * derivative.Kh,
-        Arr=metric.Arr + scale * derivative.Arr,
-        At=metric.At + scale * derivative.At,
+        Arr=Arr_trace_free,
+        At=At_trace_free,
         theta=metric.theta + scale * derivative.theta,
         Zr=metric.Zr + scale * derivative.Zr,
         Gamma=metric.Gamma + scale * derivative.Gamma,
