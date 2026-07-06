@@ -20,6 +20,7 @@ class Z4C_Metric(NamedTuple):
     # constraint terms
     kappa: jnp.ndarray
     eta: jnp.ndarray
+    nu: jnp.ndarray
     # damping parameters
     r: jnp.ndarray
     dr: jnp.ndarray

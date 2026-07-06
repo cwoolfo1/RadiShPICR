@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative
+from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative, sixth_derivative
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric  
 
 
@@ -18,6 +18,7 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     kappa = metric.kappa
     theta = metric.theta
     Gamma = metric.Gamma
+    nu    = metric.nu
     # unpack the metric and matter terms
 
     dchidr = first_derivative(chi, metric.dr)
@@ -74,6 +75,10 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     dthetadt += (alpha * dgtdr * dchidr) / (grr * gt)
     dthetadt += -(5 * alpha * (dchidr ** 2)) / (4 * grr * chi)
     dthetadt += (alpha * d2chdr2) / grr
+    # compute the time derivative of theta using the Z4C evolution equations
+
+    dthetadt += nu / 64 * (sixth_derivative(theta, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of theta
 
     return dthetadt
 
@@ -91,6 +96,7 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     kappa = metric.kappa
     theta = metric.theta
     Gamma = metric.Gamma
+    nu    = metric.nu
     # unpack the metric and matter terms
 
     dchidr = first_derivative(chi, metric.dr)
@@ -139,6 +145,10 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     dGammadt += beta * dGammadr
     dGammadt += -(3 * Arr * alpha * dchidr) / ((grr ** 2) * chi)
     dGammadt += (4 * d2betadr2) / (3 * grr)
+    # compute the time derivative of Gamma using the Z4C evolution equations
+
+    dGammadt += nu / 64 * (sixth_derivative(Gamma, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of Gamma
 
     return dGammadt
 
@@ -156,6 +166,7 @@ def dZdt(metric: Z4C_Metric, matter_terms):
     kappa = metric.kappa
     theta = metric.theta
     Zr = metric.Zr
+    nu = metric.nu
     # unpack the metric and matter terms
 
     dchidr = first_derivative(chi, metric.dr)
@@ -187,5 +198,9 @@ def dZdt(metric: Z4C_Metric, matter_terms):
     dZdt += beta * dZrdr
     dZdt += -(Arr * alpha * dchidr) / (grr * chi)
     dZdt += (At * alpha * dchidr) / (gt * chi)
+    # compute the time derivative of Zr using the Z4C evolution equations
+
+    dZdt += nu / 64 * (sixth_derivative(Zr, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of Zr
 
     return dZdt

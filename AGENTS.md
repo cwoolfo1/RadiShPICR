@@ -12,14 +12,21 @@ pieces:
 
 - `RadiShPICR.particles`: the `particle_species` container used by the current
   timestepper and tests.
-- `RadiShPICR.forces.grid`: radial grid construction through
+- `RadiShPICR.ConstraintBasedRelativity.grid`: radial grid construction through
   `build_radial_grid(...)`.
-- `RadiShPICR.forces.solve_metric`: construction of the grid-level metric and
-  field tuple through `calculate_metric(...)`.
-- `RadiShPICR.forces.geodesic` and `RadiShPICR.forces.lorentz_force`: particle
-  acceleration terms consumed by the timestepper.
-- `RadiShPICR.evolve`: source-backed time integration routines, currently
-  `step(...)` and `step_rk4(...)`.
+- `RadiShPICR.ConstraintBasedRelativity.solve_metric`: construction of the
+  grid-level metric and field tuple through `calculate_metric(...)`.
+- `RadiShPICR.ConstraintBasedRelativity.geodesic` and
+  `RadiShPICR.ConstraintBasedRelativity.lorentz_force`: particle acceleration
+  terms consumed by the constraint-based timestepper.
+- `RadiShPICR.ConstraintBasedRelativity.evolve`: constraint-based time
+  integration routines, currently `step(...)` and `step_rk4(...)`.
+- `RadiShPICR.Z4C`: Z4C metric containers, matter terms, and time-evolution
+  helpers.  This formulation has its own RK4 routines in
+  `RadiShPICR.Z4C.time_evolve`.
+- `RadiShPICR.evolve`: compatibility imports for the constraint-based
+  `step(...)` and `step_rk4(...)`.  Prefer formulation-local imports in new
+  source.
 - `RadiShPICR.diagnostics`: file writers for phase-space and metric-field
   snapshots.
 
@@ -83,8 +90,11 @@ diagnostics:
 ```python
 import jax.numpy as jnp
 
-from RadiShPICR.evolve import step_rk4
-from RadiShPICR.forces import build_radial_grid, calculate_metric
+from RadiShPICR.ConstraintBasedRelativity import (
+    build_radial_grid,
+    calculate_metric,
+    step_rk4,
+)
 from RadiShPICR.particles import particle_species
 
 
@@ -145,6 +155,7 @@ the imports.
 In particular, verify any use of:
 
 - `RadiShPICR.evolve.advance_one_step`
+- `RadiShPICR.forces.*`
 - `RadiShPICR.relativity.*`
 - `RadiShPICR.EM.*`
 - `MetricState`
@@ -175,7 +186,9 @@ cd code/RadiShPICR
 python3 -m py_compile \
     RadiShPICR/evolve.py \
     RadiShPICR/particles/particle_species.py \
-    RadiShPICR/forces/solve_metric.py \
+    RadiShPICR/ConstraintBasedRelativity/evolve.py \
+    RadiShPICR/ConstraintBasedRelativity/solve_metric.py \
+    RadiShPICR/Z4C/time_evolve.py \
     RadiShPICR/diagnostics/metric_fields.py \
     RadiShPICR/diagnostics/phase_space.py
 ```

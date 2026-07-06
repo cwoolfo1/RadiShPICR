@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
-from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative
+from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative, sixth_derivative
 
 
 def dchidt(metric: Z4C_Metric, matter_terms):
@@ -10,6 +10,7 @@ def dchidt(metric: Z4C_Metric, matter_terms):
     Kh = metric.Kh
     chi = metric.chi
     theta = metric.theta
+    nu   = metric.nu
     # unpack the metric and matter terms
 
     dchidr = first_derivative(chi, metric.dr)
@@ -29,6 +30,10 @@ def dchidt(metric: Z4C_Metric, matter_terms):
     dchidt += 2.0 * alpha * chi * Kh / 3.0
     dchidt += -4.0 * beta * chi / (3.0 * metric.r)
     dchidt += 4.0 * alpha * chi * theta / 3.0
+    # compute the time derivative of chi using the Z4C evolution equations
+
+    dchidt += nu / 64 * (sixth_derivative(chi, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of chi
 
     return dchidt
 
@@ -38,6 +43,7 @@ def dgrrdt(metric: Z4C_Metric, matter_terms):
     beta = metric.beta
     Arr  = metric.Arr
     grr = metric.conformal_grr
+    nu  = metric.nu
     # unpack the metric and matter terms
 
     dbetadr = first_derivative(beta, metric.dr)
@@ -52,6 +58,10 @@ def dgrrdt(metric: Z4C_Metric, matter_terms):
     dgrrdt = -2.0 * alpha * Arr
     dgrrdt += beta * dgrrdr
     dgrrdt += 4.0 * grr * (beta - dbetadr * metric.r) / (3.0 * metric.r)
+    # compute the time derivative of grr using the Z4C evolution equations
+
+    dgrrdt += nu / 64 * (sixth_derivative(grr, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of grr
 
     return dgrrdt
 
@@ -61,6 +71,7 @@ def dgtdt(metric: Z4C_Metric, matter_terms):
     At   = metric.At
     grr = metric.conformal_grr
     gt = metric.conformal_gt
+    nu  = metric.nu
     # unpack the metric and matter terms
 
     dbetadr = first_derivative(beta, metric.dr)
@@ -75,5 +86,9 @@ def dgtdt(metric: Z4C_Metric, matter_terms):
     dgtdt = -2.0 * alpha * At
     dgtdt += beta * dgtdr
     dgtdt += (2.0 * gt * (beta - dbetadr * metric.r)) / (3.0 * metric.r)
+    # compute the time derivative of gt using the Z4C evolution equations
+
+    dgtdt += nu / 64 * (sixth_derivative(gt, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of gt
 
     return dgtdt

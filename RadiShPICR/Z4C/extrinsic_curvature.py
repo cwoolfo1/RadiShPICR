@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 
-from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative
+from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative, sixth_derivative
 
 
 def dKhdt(metric: Z4C_Metric, matter_terms):
@@ -16,6 +16,7 @@ def dKhdt(metric: Z4C_Metric, matter_terms):
     chi = metric.chi
     kappa = metric.kappa
     theta = metric.theta
+    nu    = metric.nu
     # unpack the metric and matter terms
 
     dalphadr = first_derivative(alpha, metric.dr)
@@ -57,6 +58,10 @@ def dKhdt(metric: Z4C_Metric, matter_terms):
     dKhdt += beta * dKhdr
     dKhdt += (dalphadr * dchidr) / (2 * grr)
     dKhdt += -(chi * d2alphadr2) / grr
+    # compute the time derivative of Kh using the Z4C evolution equations
+
+    dKhdt += nu / 64 * (sixth_derivative(Kh, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of Kh
 
     return dKhdt
 
@@ -73,6 +78,7 @@ def dArrdt(metric: Z4C_Metric, matter_terms):
     Kh = metric.Kh
     chi = metric.chi
     theta = metric.theta
+    nu    = metric.nu
     # unpack the metric and matter terms
 
     dgrrdr = first_derivative(grr, metric.dr)
@@ -140,7 +146,11 @@ def dArrdt(metric: Z4C_Metric, matter_terms):
     dArrdt += (2 * At * grr * beta * dgtdr) / (3 * (gt ** 2))
     dArrdt += (2 * grr * alpha * chi * dgtdr) / (3 * metric.r * (gt ** 2))
     dArrdt += (alpha * chi * dgrrdr * dgtdr) / (6 * grr * gt)
-    dArrdt += -(alpha * chi * (dgtdr ** 2)) / (3 * (gt ** 2))       
+    dArrdt += -(alpha * chi * (dgtdr ** 2)) / (3 * (gt ** 2))  
+    # compute the time derivative of Arr using the Z4C evolution equations
+    #      
+    dArrdt += nu / 64 * (sixth_derivative(Arr, metric.dr)) * (metric.dr ** 5)
+    # add the Kreiss-Oliger dissipation term to the time derivative of Arr
 
     return dArrdt
 
@@ -159,6 +169,7 @@ def dAtdt(metric: Z4C_Metric, matter_terms):
     kappa = metric.kappa
     theta = metric.theta
     Gamma = metric.Gamma
+    nu    = metric.nu
     # unpack the metric and matter terms
 
     dalphadr = first_derivative(alpha, metric.dr)
@@ -247,6 +258,9 @@ def dAtdt(metric: Z4C_Metric, matter_terms):
     dAtdt += (gt * alpha * chi * d2grrdr2) / (6 * (grr ** 2))
     dAtdt += -(alpha * chi * d2gtdr2) / (6 * grr)
     dAtdt += (gt * chi * d2alphadr2) / (3 * grr)
-    dAtdt += -(gt * alpha * d2chidr2) / (6 * grr)   
+    dAtdt += -(gt * alpha * d2chidr2) / (6 * grr)
+    # compute the time derivative of At using the Z4C evolution equations
+
+    dAtdt += nu / 64 * (sixth_derivative(At, metric.dr)) * (metric.dr ** 5)   
 
     return dAtdt

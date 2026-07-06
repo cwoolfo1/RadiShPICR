@@ -104,8 +104,8 @@ def compute_geodesic_terms(particles, metric: Z4C_Metric):
     duphi_dt = -( (2 * uphi * ur * alpha_p)/r_particle )
     duphi_dt += -uphi * ur**2 * alpha_p * Arr_p
     duphi_dt += -uphi**3 * alpha_p * At_p
-    duphi_dt += uphi * alpha_p * (ur**2 / gt_p**2 + uphi**2 * gt_p) * KTh_p / (3 * chi_p)
-    duphi_dt += (2/3 * uphi * alpha_p * KTh_p + (2 * uphi * alpha_p * At_p * chi_p) / gt_p)
+    duphi_dt += -uphi * alpha_p * (ur**2 / gt_p**2 + uphi**2 * gt_p) * KTh_p / (3 * chi_p)
+    duphi_dt += (2/3 * uphi * alpha_p * KTh_p + (2 * uphi * alpha_p * At_p * chi_p) / gt_p) / r_particle**2
     duphi_dt += uphi * ur * dalphadr_p
     duphi_dt += -(uphi * ur * alpha_p * dgtdr_p) / gt_p
     duphi_dt += (uphi * ur * alpha_p * dchidr_p) / chi_p
