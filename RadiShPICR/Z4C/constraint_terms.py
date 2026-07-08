@@ -21,12 +21,12 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     nu    = metric.nu
     # unpack the metric and matter terms
 
-    dchidr = first_derivative(chi, metric.dr)
-    dgrrdr = first_derivative(grr, metric.dr)
-    dgtdr = first_derivative(gt, metric.dr)
-    dGammadr = first_derivative(Gamma, metric.dr)
-    dthetadr = first_derivative(theta, metric.dr)
-    d2chdr2 = second_derivative(chi, metric.dr)
+    dchidr = first_derivative(chi, metric.dr, parity=1)
+    dgrrdr = first_derivative(grr, metric.dr, parity=1)
+    dgtdr = first_derivative(gt, metric.dr, parity=1)
+    dGammadr = first_derivative(Gamma, metric.dr, parity=-1)
+    dthetadr = first_derivative(theta, metric.dr, parity=1)
+    d2chdr2 = second_derivative(chi, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
     rho = matter_terms.rho
@@ -77,7 +77,7 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     dthetadt += (alpha * d2chdr2) / grr
     # compute the time derivative of theta using the Z4C evolution equations
 
-    dthetadt += nu / 64 * (sixth_derivative(theta, metric.dr)) * (metric.dr ** 5)
+    dthetadt += nu / 64 * (sixth_derivative(theta, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of theta
 
     return dthetadt
@@ -99,15 +99,15 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     nu    = metric.nu
     # unpack the metric and matter terms
 
-    dchidr = first_derivative(chi, metric.dr)
-    dgrrdr = first_derivative(grr, metric.dr)
-    dgtdr = first_derivative(gt, metric.dr)
-    dGammadr = first_derivative(Gamma, metric.dr)
-    dalphadr = first_derivative(alpha, metric.dr)
-    dbetadr = first_derivative(beta, metric.dr)
-    dthetadr = first_derivative(theta, metric.dr)
-    dKhdr = first_derivative(Kh, metric.dr)
-    d2betadr2 = second_derivative(beta, metric.dr)
+    dchidr = first_derivative(chi, metric.dr, parity=1)
+    dgrrdr = first_derivative(grr, metric.dr, parity=1)
+    dgtdr = first_derivative(gt, metric.dr, parity=1)
+    dGammadr = first_derivative(Gamma, metric.dr, parity=-1)
+    dalphadr = first_derivative(alpha, metric.dr, parity=1)
+    dbetadr = first_derivative(beta, metric.dr, parity=-1)
+    dthetadr = first_derivative(theta, metric.dr, parity=1)
+    dKhdr = first_derivative(Kh, metric.dr, parity=1)
+    d2betadr2 = second_derivative(beta, metric.dr, parity=-1)
     # compute derivatives of the metric functions using finite difference methods
 
     # dGammadt = -((2 \[Kappa]1 * alpha )/(r grr )) + (4 At * alpha )/(
@@ -147,7 +147,7 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     dGammadt += (4 * d2betadr2) / (3 * grr)
     # compute the time derivative of Gamma using the Z4C evolution equations
 
-    dGammadt += nu / 64 * (sixth_derivative(Gamma, metric.dr)) * (metric.dr ** 5)
+    dGammadt += nu / 64 * (sixth_derivative(Gamma, metric.dr, parity=-1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of Gamma
 
     return dGammadt

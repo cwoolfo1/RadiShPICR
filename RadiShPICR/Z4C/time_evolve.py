@@ -24,11 +24,11 @@ def metric_time_derivatives(metric: Z4C_Metric, matter_terms):
         Arr=dArrdt(metric, matter_terms),
         At=dAtdt(metric, matter_terms),
         theta=dthetadt(metric, matter_terms),
-        Zr=dZdt(metric, matter_terms),
+        Zr=zeros, #dZdt(metric, matter_terms),
         Gamma=dGammadt(metric, matter_terms),
-        kappa=zeros,
-        eta=zeros,
-        nu=zeros,
+        kappa=0.0,
+        eta=0.0,
+        nu=0.0,
         r=zeros,
         dr=zero_dr,
     )
@@ -53,11 +53,11 @@ def _add_metric_derivative(metric, derivative, scale):
         theta=metric.theta + scale * derivative.theta,
         Zr=metric.Zr + scale * derivative.Zr,
         Gamma=metric.Gamma + scale * derivative.Gamma,
-        kappa=metric.kappa + scale * derivative.kappa,
-        eta=metric.eta + scale * derivative.eta,
-        nu=metric.nu + scale * derivative.nu,
-        r=metric.r + scale * derivative.r,
-        dr=metric.dr + scale * derivative.dr,
+        kappa=metric.kappa,
+        eta=metric.eta,
+        nu=metric.nu,
+        r=metric.r,
+        dr=metric.dr,
     )
 
 
@@ -84,11 +84,11 @@ def _combine_rk4_derivatives(k1, k2, k3, k4):
         theta=k1.theta + 2.0 * k2.theta + 2.0 * k3.theta + k4.theta,
         Zr=k1.Zr + 2.0 * k2.Zr + 2.0 * k3.Zr + k4.Zr,
         Gamma=k1.Gamma + 2.0 * k2.Gamma + 2.0 * k3.Gamma + k4.Gamma,
-        kappa=k1.kappa + 2.0 * k2.kappa + 2.0 * k3.kappa + k4.kappa,
-        eta=k1.eta + 2.0 * k2.eta + 2.0 * k3.eta + k4.eta,
-        nu=k1.nu + 2.0 * k2.nu + 2.0 * k3.nu + k4.nu,
-        r=k1.r + 2.0 * k2.r + 2.0 * k3.r + k4.r,
-        dr=k1.dr + 2.0 * k2.dr + 2.0 * k3.dr + k4.dr,
+        kappa=k1.kappa,
+        eta=k1.eta,
+        nu=k1.nu,
+        r=k1.r,
+        dr=k1.dr,
     )
 
 
