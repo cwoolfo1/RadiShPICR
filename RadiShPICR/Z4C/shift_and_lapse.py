@@ -18,7 +18,7 @@ def dalphadt(metric: Z4C_Metric, matter_terms):
     dalphadt += beta * dalphadr
     # compute the time derivative of alpha using the Z4C evolution equations
 
-    dalphadt += nu / 64 * (sixth_derivative(alpha, metric.dr)) * (metric.dr ** 5)
+    dalphadt += nu / 64 * (sixth_derivative(alpha, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of alpha
 
     return dalphadt
@@ -41,7 +41,7 @@ def dbetadt(metric: Z4C_Metric, matter_terms):
     dbetadt += beta * dbetadr
     # compute the time derivative of beta using the Z4C evolution equations
 
-    dbetadt += nu / 64 * (sixth_derivative(beta, metric.dr)) * (metric.dr ** 5)
+    dbetadt += nu / 64 * (sixth_derivative(beta, metric.dr, parity=-1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of beta
 
     return dbetadt

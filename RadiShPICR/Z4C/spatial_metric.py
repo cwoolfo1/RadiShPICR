@@ -13,8 +13,8 @@ def dchidt(metric: Z4C_Metric, matter_terms):
     nu   = metric.nu
     # unpack the metric and matter terms
 
-    dchidr = first_derivative(chi, metric.dr)
-    dbetadr = first_derivative(beta, metric.dr)
+    dchidr = first_derivative(chi, metric.dr, parity=1)
+    dbetadr = first_derivative(beta, metric.dr, parity=-1)
     # compute derivatives of the metric functions using finite difference methods
 
 
@@ -32,7 +32,7 @@ def dchidt(metric: Z4C_Metric, matter_terms):
     dchidt += 4.0 * alpha * chi * theta / 3.0
     # compute the time derivative of chi using the Z4C evolution equations
 
-    dchidt += nu / 64 * (sixth_derivative(chi, metric.dr)) * (metric.dr ** 5)
+    dchidt += nu / 64 * (sixth_derivative(chi, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of chi
 
     return dchidt
@@ -46,8 +46,8 @@ def dgrrdt(metric: Z4C_Metric, matter_terms):
     nu  = metric.nu
     # unpack the metric and matter terms
 
-    dbetadr = first_derivative(beta, metric.dr)
-    dgrrdr = first_derivative(grr, metric.dr)
+    dbetadr = first_derivative(beta, metric.dr, parity=-1)
+    dgrrdr = first_derivative(grr, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
 
@@ -60,7 +60,7 @@ def dgrrdt(metric: Z4C_Metric, matter_terms):
     dgrrdt += 4.0 * grr * (beta - dbetadr * metric.r) / (3.0 * metric.r)
     # compute the time derivative of grr using the Z4C evolution equations
 
-    dgrrdt += nu / 64 * (sixth_derivative(grr, metric.dr)) * (metric.dr ** 5)
+    dgrrdt += nu / 64 * (sixth_derivative(grr, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of grr
 
     return dgrrdt
@@ -74,8 +74,8 @@ def dgtdt(metric: Z4C_Metric, matter_terms):
     nu  = metric.nu
     # unpack the metric and matter terms
 
-    dbetadr = first_derivative(beta, metric.dr)
-    dgtdr = first_derivative(gt, metric.dr)
+    dbetadr = first_derivative(beta, metric.dr, parity=-1)
+    dgtdr = first_derivative(gt, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
 
@@ -88,7 +88,7 @@ def dgtdt(metric: Z4C_Metric, matter_terms):
     dgtdt += (2.0 * gt * (beta - dbetadr * metric.r)) / (3.0 * metric.r)
     # compute the time derivative of gt using the Z4C evolution equations
 
-    dgtdt += nu / 64 * (sixth_derivative(gt, metric.dr)) * (metric.dr ** 5)
+    dgtdt += nu / 64 * (sixth_derivative(gt, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of gt
 
     return dgtdt
