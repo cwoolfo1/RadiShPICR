@@ -17,3 +17,8 @@ def trace_free_curvature(Arr, At, metric: Z4C_Metric):
     # compute the trace-free parts
 
     return Arr_trace_free, At_trace_free
+
+def generate_r_grid(r_min, r_max, Nr):
+    r_grid = jnp.linspace(r_min, r_max, Nr)
+    r_grid += (r_max - r_min)/(2*Nr) # shift cells so cell center is at dr/2
+    return r_grid

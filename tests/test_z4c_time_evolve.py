@@ -24,6 +24,7 @@ def _flat_metric(r):
         Gamma=zeros,
         kappa=zeros,
         eta=zeros,
+        nu=zeros,
         r=r,
         dr=r[1] - r[0],
     )
@@ -46,6 +47,7 @@ def _metric_derivative(metric, alpha_value):
         Gamma=zeros,
         kappa=zeros,
         eta=zeros,
+        nu=zeros,
         r=zeros,
         dr=jnp.asarray(0.0, dtype=metric.dr.dtype),
     )
@@ -79,6 +81,7 @@ def test_metric_time_derivatives_match_metric_layout():
 
     assert jnp.allclose(derivatives.kappa, 0.0)
     assert jnp.allclose(derivatives.eta, 0.0)
+    assert jnp.allclose(derivatives.nu, 0.0)
     assert jnp.allclose(derivatives.r, 0.0)
     assert jnp.allclose(derivatives.dr, 0.0)
 
@@ -94,6 +97,7 @@ def test_rk4_step_keeps_grid_and_damping_parameters_fixed():
 
     assert jnp.allclose(updated.kappa, metric.kappa)
     assert jnp.allclose(updated.eta, metric.eta)
+    assert jnp.allclose(updated.nu, metric.nu)
     assert jnp.allclose(updated.r, metric.r)
     assert jnp.allclose(updated.dr, metric.dr)
 
@@ -138,6 +142,7 @@ def test_rk4_step_uses_classic_stage_weights(monkeypatch):
             Gamma=zeros,
             kappa=zeros,
             eta=zeros,
+            nu=zeros,
             r=zeros,
             dr=jnp.asarray(0.0, dtype=stage_metric.dr.dtype),
         )

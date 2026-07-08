@@ -6,8 +6,9 @@ def dalphadt(metric: Z4C_Metric, matter_terms):
     alpha = metric.alpha
     beta = metric.beta
     Kh = metric.Kh
+    nu = metric.nu
 
-    dalphadr = first_derivative(alpha, metric.dr)
+    dalphadr = first_derivative(alpha, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
  
     # dalphadt = -2 * alpha * Kh + beta * dalphadr;
@@ -29,7 +30,7 @@ def dbetadt(metric: Z4C_Metric, matter_terms):
     nu = metric.nu
     # unpack the metric and matter terms
 
-    dbetadr = first_derivative(beta, metric.dr)
+    dbetadr = first_derivative(beta, metric.dr, parity=-1)
     # compute derivatives of the metric functions using finite difference methods
 
     # dbetadt = -\[Eta] beta +  5/2 * Gamma + beta * dbetadr;
