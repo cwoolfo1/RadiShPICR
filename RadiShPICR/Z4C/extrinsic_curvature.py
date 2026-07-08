@@ -19,12 +19,12 @@ def dKhdt(metric: Z4C_Metric, matter_terms):
     nu    = metric.nu
     # unpack the metric and matter terms
 
-    dalphadr = first_derivative(alpha, metric.dr)
-    dchidr = first_derivative(chi, metric.dr)
-    dgrrdr = first_derivative(grr, metric.dr)
-    dgtdr = first_derivative(gt, metric.dr)
-    dKhdr = first_derivative(Kh, metric.dr)
-    d2alphadr2 = second_derivative(alpha, metric.dr)
+    dalphadr = first_derivative(alpha, metric.dr, parity=1)
+    dchidr = first_derivative(chi, metric.dr, parity=1)
+    dgrrdr = first_derivative(grr, metric.dr, parity=1)
+    dgtdr = first_derivative(gt, metric.dr, parity=1)
+    dKhdr = first_derivative(Kh, metric.dr, parity=1)
+    d2alphadr2 = second_derivative(alpha, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
     St = matter_terms.St
@@ -60,7 +60,7 @@ def dKhdt(metric: Z4C_Metric, matter_terms):
     dKhdt += -(chi * d2alphadr2) / grr
     # compute the time derivative of Kh using the Z4C evolution equations
 
-    dKhdt += nu / 64 * (sixth_derivative(Kh, metric.dr)) * (metric.dr ** 5)
+    dKhdt += nu / 64 * (sixth_derivative(Kh, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of Kh
 
     return dKhdt
@@ -81,10 +81,10 @@ def dArrdt(metric: Z4C_Metric, matter_terms):
     nu    = metric.nu
     # unpack the metric and matter terms
 
-    dgrrdr = first_derivative(grr, metric.dr)
-    dgtdr = first_derivative(gt, metric.dr)
-    dArrdr = first_derivative(Arr, metric.dr)
-    dAtdr = first_derivative(At, metric.dr)
+    dgrrdr = first_derivative(grr, metric.dr, parity=1)
+    dgtdr = first_derivative(gt, metric.dr, parity=1)
+    dArrdr = first_derivative(Arr, metric.dr, parity=1)
+    dAtdr = first_derivative(At, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
     St = matter_terms.St
@@ -149,7 +149,7 @@ def dArrdt(metric: Z4C_Metric, matter_terms):
     dArrdt += -(alpha * chi * (dgtdr ** 2)) / (3 * (gt ** 2))  
     # compute the time derivative of Arr using the Z4C evolution equations
     #      
-    dArrdt += nu / 64 * (sixth_derivative(Arr, metric.dr)) * (metric.dr ** 5)
+    dArrdt += nu / 64 * (sixth_derivative(Arr, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of Arr
 
     return dArrdt
@@ -172,18 +172,18 @@ def dAtdt(metric: Z4C_Metric, matter_terms):
     nu    = metric.nu
     # unpack the metric and matter terms
 
-    dalphadr = first_derivative(alpha, metric.dr)
-    dchidr = first_derivative(chi, metric.dr)
-    dgrrdr = first_derivative(grr, metric.dr)
-    dgtdr = first_derivative(gt, metric.dr)
-    d2alphadr2 = second_derivative(alpha, metric.dr)
-    d2chidr2 = second_derivative(chi, metric.dr)
-    d2grrdr2 = second_derivative(grr, metric.dr)
-    d2gtdr2 = second_derivative(gt, metric.dr)
-    dbetadr = first_derivative(beta, metric.dr)
-    dGammadr = first_derivative(Gamma, metric.dr)
-    dAtdr = first_derivative(At, metric.dr)
-    dArrdr = first_derivative(Arr, metric.dr)
+    dalphadr = first_derivative(alpha, metric.dr, parity=1)
+    dchidr = first_derivative(chi, metric.dr, parity=1)
+    dgrrdr = first_derivative(grr, metric.dr, parity=1)
+    dgtdr = first_derivative(gt, metric.dr, parity=1)
+    d2alphadr2 = second_derivative(alpha, metric.dr, parity=1)
+    d2chidr2 = second_derivative(chi, metric.dr, parity=1)
+    d2grrdr2 = second_derivative(grr, metric.dr, parity=1)
+    d2gtdr2 = second_derivative(gt, metric.dr, parity=1)
+    dbetadr = first_derivative(beta, metric.dr, parity=-1)
+    dGammadr = first_derivative(Gamma, metric.dr, parity=-1)
+    dAtdr = first_derivative(At, metric.dr, parity=1)
+    dArrdr = first_derivative(Arr, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
     St = matter_terms.St
@@ -261,6 +261,6 @@ def dAtdt(metric: Z4C_Metric, matter_terms):
     dAtdt += -(gt * alpha * d2chidr2) / (6 * grr)
     # compute the time derivative of At using the Z4C evolution equations
 
-    dAtdt += nu / 64 * (sixth_derivative(At, metric.dr)) * (metric.dr ** 5)   
+    dAtdt += nu / 64 * (sixth_derivative(At, metric.dr, parity=1)) * (metric.dr ** 5)   
 
     return dAtdt
