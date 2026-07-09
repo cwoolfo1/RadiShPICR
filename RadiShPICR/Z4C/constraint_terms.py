@@ -136,7 +136,7 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     dGammadt += (kappa * alpha * dgrrdr) / (grr ** 2)
     dGammadt += (4 * beta * dgrrdr) / (3 * metric.r * (grr ** 2))
     dGammadt += -(2 * At * alpha * dgtdr) / (grr * (gt ** 2))
-    dGammadt += -(2 * Arr * alpha * dalphadr) / (grr ** 2)
+    dGammadt += -(2 * Arr * dalphadr) / (grr ** 2)
     dGammadt += -(2 * alpha * dthetadr) / (3 * grr)
     dGammadt += -(4 * alpha * dKhdr) / (3 * grr)
     dGammadt += (4 * dbetadr) / (3 * metric.r * grr)

@@ -57,7 +57,7 @@ def dgrrdt(metric: Z4C_Metric, matter_terms):
 
     dgrrdt = -2.0 * alpha * Arr
     dgrrdt += beta * dgrrdr
-    dgrrdt += 4.0 * grr * (beta - dbetadr * metric.r) / (3.0 * metric.r)
+    dgrrdt += 4.0 * grr * ( -beta + dbetadr * metric.r) / (3.0 * metric.r)
     # compute the time derivative of grr using the Z4C evolution equations
 
     dgrrdt += nu / 64 * (sixth_derivative(grr, metric.dr, parity=1)) * (metric.dr ** 5)

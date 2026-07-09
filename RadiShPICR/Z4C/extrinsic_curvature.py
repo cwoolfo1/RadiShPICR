@@ -191,33 +191,46 @@ def dAtdt(metric: Z4C_Metric, matter_terms):
     # unpack the matter terms
 
 
-    #     dATdt = (Arr * At * alpha)/(3 grr) - ((Arr)^2 gt * alpha)/(
-    #    3 (grr)^2) + 2/3 At * alpha * theta - (
-    #    2 Arr * gt * alpha * theta)/(3 grr) + 1/3 At * alpha * Kh - (
-    #    Arr * gt * alpha * Kh)/(3 grr ) + (2 At * beta )/(9 r) - (
-    #    2 Arr * gt * beta )/(9 r * grr ) + (alpha * chi  )/(3 r^2) - (
-    #    2 grr * alpha * chi  )/(3 (r^2) * gt ) + (gt * alpha * chi  )/(
-    #    3 (r^2) * grr ) + (8 \[Pi] gt * alpha *Srr * chi  )/(3 grr ) - 
-    #    8/3 \[Pi] alpha *St * chi  + (grr * alpha * Gamma * chi  )/(
-    #    3 r) - (gt * beta * dArrdr)/(3 grr ) + 1/3 beta *dAtdr + (
-    #    Arr * gt * beta * dgrrdr )/(3 (grr )^2) + (
-    #    alpha * chi *  dgrrdr )/(2 r * grr ) - (
-    #    gt * alpha * chi *  dgrrdr )/(6 r * (grr )^2) - (
-    #    gt * alpha * Gamma * chi *  dgrrdr )/(3 grr ) - (
-    #    gt * alpha * chi *  (dgrrdr )^2)/(6 (grr )^3) - (
-    #    Arr * beta * dgtdr )/(3 grr ) - (alpha * chi *  dgtdr )/(
-    #    3 r *gt ) - (alpha * chi *  dgrrdr * dgtdr )/(12 (grr )^2) + (
-    #    alpha * chi *  (dgtdr )^2)/(6 grr * gt ) - (gt * chi *  dalphadr)/(
-    #    3 r * grr ) - (gt * chi *  dgrrdr * dalphadr)/(6 (grr )^2) - (
-    #    chi *  dgtdr * dalphadr)/(6 grr ) - 2/9 At * dbetadr + (
-    #    2 Arr * gt * dbetadr )/(9 grr ) - 
-    #    1/3 gt * alpha * chi *  dGammadr + (gt * alpha * dchidr )/(
-    #    6 r grr ) + (gt * alpha * dgrrdr * dchidr )/(12 (grr )^2) + (
-    #    alpha * dgtdr * dchidr )/(12 grr ) + (gt * dalphadr * dchidr )/(
-    #    3 grr ) + (gt * alpha * (dchidr)^2)/(12 grr * chi  ) + (
-    #    gt * alpha * chi *  d2grrdr2)/(6 (grr )^2) - (
-    #    alpha * chi *  d2gtdr2)/(6 grr ) + (gt * chi * d2alphadr2)/(
-    #    3 grr ) - (gt * alpha * d2chidr2)/(6 grr );
+    #     dATdt = (Arr * At * alpha)/(3 grr) 
+    # - ((Arr)^2 gt * alpha)/(3 (grr)^2)
+    #  + 2/3 At * alpha * theta -
+    #  (2 Arr * gt * alpha * theta)/(3 grr)
+    #  + 1/3 At * alpha * Kh 
+    # - (Arr * gt * alpha * Kh)/(3 grr ) 
+    # + (2 At * beta )/(9 r)
+    #  - (2 Arr * gt * beta )/(9 r * grr )
+    #  + (alpha * chi  )/(3 r^2)
+    #  - (2 grr * alpha * chi  )/(3 (r^2) * gt ) 
+    # + (gt * alpha * chi  )/(3 (r^2) * grr )
+    #  + (8 \[Pi] gt * alpha *Srr * chi  )/(3 grr ) 
+    # - 8/3 \[Pi] alpha *St * chi  
+    # + (grr * alpha * Gamma * chi  )/(3 r) 
+    # - (gt * beta * dArrdr)/(3 grr ) 
+    # + 1/3 beta *dAtdr 
+    # + (Arr * gt * beta * dgrrdr )/(3 (grr )^2) 
+    # + (alpha * chi *  dgrrdr )/(2 r * grr ) 
+    # - (gt * alpha * chi *  dgrrdr )/(6 r * (grr )^2) 
+    # - (gt * alpha * Gamma * chi *  dgrrdr )/(3 grr ) 
+    # - (gt * alpha * chi *  (dgrrdr )^2)/(6 (grr )^3)
+    #  - (Arr * beta * dgtdr )/(3 grr ) 
+    # - (alpha * chi *  dgtdr )/(3 r *gt ) 
+    # - (alpha * chi *  dgrrdr * dgtdr )/(12 (grr )^2)
+    #  + ( alpha * chi *  (dgtdr )^2)/(6 grr * gt )
+    #  - (gt * chi *  dalphadr)/(3 r * grr ) 
+    # - (gt * chi *  dgrrdr * dalphadr)/(6 (grr )^2) 
+    # - (chi *  dgtdr * dalphadr)/(6 grr ) 
+    # - 2/9 At * dbetadr 
+    # + (2 Arr * gt * dbetadr )/(9 grr ) 
+    # - 1/3 gt * alpha * chi *  dGammadr 
+    # + (gt * alpha * dchidr )/(6 r grr ) 
+    # + (gt * alpha * dgrrdr * dchidr )/(12 (grr )^2)
+    #  + (alpha * dgtdr * dchidr )/(12 grr ) 
+    # + (gt * dalphadr * dchidr )/(3 grr ) 
+    # + (gt * alpha * (dchidr)^2)/(12 grr * chi  ) 
+    # + (gt * alpha * chi *  d2grrdr2)/(6 (grr )^2) 
+    # - (alpha * chi *  d2gtdr2)/(6 grr ) 
+    # + (gt * chi * d2alphadr2)/(3 grr ) 
+    # - (gt * alpha * d2chidr2)/(6 grr );
 
     dAtdt = (Arr * At * alpha) / (3 * grr)
     dAtdt += -((Arr ** 2) * gt * alpha) / (3 * (grr ** 2))
