@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from RadiShPICR.Z4C.constraint_terms import dGammadt, dZdt, dthetadt
+from RadiShPICR.Z4C.constraint_terms import dGammadt, dthetadt
 from RadiShPICR.Z4C.extrinsic_curvature import dArrdt, dAtdt, dKhdt
 from RadiShPICR.Z4C.shift_and_lapse import dalphadt, dbetadt
 from RadiShPICR.Z4C.spatial_metric import dchidt, dgrrdt, dgtdt
@@ -24,7 +24,7 @@ def metric_time_derivatives(metric: Z4C_Metric, matter_terms):
         Arr=dArrdt(metric, matter_terms),
         At=dAtdt(metric, matter_terms),
         theta=dthetadt(metric, matter_terms),
-        Zr=zeros, #dZdt(metric, matter_terms),
+        # Zr=zeros, #dZdt(metric, matter_terms),
         Gamma=dGammadt(metric, matter_terms),
         kappa=0.0,
         eta=0.0,
@@ -51,7 +51,7 @@ def _add_metric_derivative(metric, derivative, scale):
         Arr=Arr_trace_free,
         At=At_trace_free,
         theta=metric.theta + scale * derivative.theta,
-        Zr=metric.Zr + scale * derivative.Zr,
+        # Zr=metric.Zr + scale * derivative.Zr,
         Gamma=metric.Gamma + scale * derivative.Gamma,
         kappa=metric.kappa,
         eta=metric.eta,
@@ -82,7 +82,7 @@ def _combine_rk4_derivatives(k1, k2, k3, k4):
         Arr=k1.Arr + 2.0 * k2.Arr + 2.0 * k3.Arr + k4.Arr,
         At=k1.At + 2.0 * k2.At + 2.0 * k3.At + k4.At,
         theta=k1.theta + 2.0 * k2.theta + 2.0 * k3.theta + k4.theta,
-        Zr=k1.Zr + 2.0 * k2.Zr + 2.0 * k3.Zr + k4.Zr,
+        # Zr=k1.Zr + 2.0 * k2.Zr + 2.0 * k3.Zr + k4.Zr,
         Gamma=k1.Gamma + 2.0 * k2.Gamma + 2.0 * k3.Gamma + k4.Gamma,
         kappa=k1.kappa,
         eta=k1.eta,

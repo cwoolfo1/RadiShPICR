@@ -153,54 +153,54 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     return dGammadt
 
 
-def dZdt(metric: Z4C_Metric, matter_terms):
-    Arr = metric.Arr
-    At = metric.At
-    alpha = metric.alpha
-    beta = metric.beta
-    chi = metric.chi
-    grr = metric.conformal_grr
-    gt = metric.conformal_gt
-    Kh = metric.Kh
-    chi = metric.chi
-    kappa = metric.kappa
-    theta = metric.theta
-    Zr = metric.Zr
-    nu = metric.nu
-    # unpack the metric and matter terms
+# def dZdt(metric: Z4C_Metric, matter_terms):
+#     Arr = metric.Arr
+#     At = metric.At
+#     alpha = metric.alpha
+#     beta = metric.beta
+#     chi = metric.chi
+#     grr = metric.conformal_grr
+#     gt = metric.conformal_gt
+#     Kh = metric.Kh
+#     chi = metric.chi
+#     kappa = metric.kappa
+#     theta = metric.theta
+#     Zr = metric.Zr
+#     nu = metric.nu
+#     # unpack the metric and matter terms
 
-    dchidr = first_derivative(chi, metric.dr)
-    dgtdr = first_derivative(gt, metric.dr)
-    dAtdr = first_derivative(At, metric.dr)
-    dthetadr = first_derivative(theta, metric.dr)
-    dKhdr = first_derivative(Kh, metric.dr)
-    dZrdr = first_derivative(Zr, metric.dr)
-    # compute derivatives of the metric functions using finite difference methods
+#     dchidr = first_derivative(chi, metric.dr)
+#     dgtdr = first_derivative(gt, metric.dr)
+#     dAtdr = first_derivative(At, metric.dr)
+#     dthetadr = first_derivative(theta, metric.dr)
+#     dKhdr = first_derivative(Kh, metric.dr)
+#     dZrdr = first_derivative(Zr, metric.dr)
+#     # compute derivatives of the metric functions using finite difference methods
 
 
-    #     dZdt = (2 Arr * alpha )/(r * grr ) - (2 At * alpha )/(
-    #    r * gt ) - \[Kappa]1 * alpha *Zr - (8 \[Pi] grr * Sr * alpha )/
-    #    chi   - (2 alpha *dAtdr)/gt  + (At * alpha * dgtdr )/(gt )^2 + (
-    #    Arr * alpha * dgtdr )/(grr * gt ) - 1/3 alpha * dthetadr - 
-    #    2/3 alpha * dKhdr + beta * dZrdr - (Arr * alpha * dchidr )/(
-    #    grr * chi ) + (At * alpha * dchidr )/(gt * chi );
-    #   # original equation from mathmatica notebook
+#     #     dZdt = (2 Arr * alpha )/(r * grr ) - (2 At * alpha )/(
+#     #    r * gt ) - \[Kappa]1 * alpha *Zr - (8 \[Pi] grr * Sr * alpha )/
+#     #    chi   - (2 alpha *dAtdr)/gt  + (At * alpha * dgtdr )/(gt )^2 + (
+#     #    Arr * alpha * dgtdr )/(grr * gt ) - 1/3 alpha * dthetadr - 
+#     #    2/3 alpha * dKhdr + beta * dZrdr - (Arr * alpha * dchidr )/(
+#     #    grr * chi ) + (At * alpha * dchidr )/(gt * chi );
+#     #   # original equation from mathmatica notebook
 
-    dZdt = (2 * Arr * alpha) / (metric.r * grr)
-    dZdt += -(2 * At * alpha) / (metric.r * gt)
-    dZdt += -kappa * alpha * Zr
-    dZdt += -(8 * jnp.pi * grr * matter_terms.Sr * alpha) / chi
-    dZdt += -(2 * alpha * dAtdr) / gt
-    dZdt += (At * alpha * dgtdr) / (gt ** 2)
-    dZdt += (Arr * alpha * dgtdr) / (grr * gt)
-    dZdt += -(1 / 3) * alpha * dthetadr
-    dZdt += -(2 / 3) * alpha * dKhdr
-    dZdt += beta * dZrdr
-    dZdt += -(Arr * alpha * dchidr) / (grr * chi)
-    dZdt += (At * alpha * dchidr) / (gt * chi)
-    # compute the time derivative of Zr using the Z4C evolution equations
+#     dZdt = (2 * Arr * alpha) / (metric.r * grr)
+#     dZdt += -(2 * At * alpha) / (metric.r * gt)
+#     dZdt += -kappa * alpha * Zr
+#     dZdt += -(8 * jnp.pi * grr * matter_terms.Sr * alpha) / chi
+#     dZdt += -(2 * alpha * dAtdr) / gt
+#     dZdt += (At * alpha * dgtdr) / (gt ** 2)
+#     dZdt += (Arr * alpha * dgtdr) / (grr * gt)
+#     dZdt += -(1 / 3) * alpha * dthetadr
+#     dZdt += -(2 / 3) * alpha * dKhdr
+#     dZdt += beta * dZrdr
+#     dZdt += -(Arr * alpha * dchidr) / (grr * chi)
+#     dZdt += (At * alpha * dchidr) / (gt * chi)
+#     # compute the time derivative of Zr using the Z4C evolution equations
 
-    dZdt += nu / 64 * (sixth_derivative(Zr, metric.dr)) * (metric.dr ** 5)
-    # add the Kreiss-Oliger dissipation term to the time derivative of Zr
+#     dZdt += nu / 64 * (sixth_derivative(Zr, metric.dr)) * (metric.dr ** 5)
+#     # add the Kreiss-Oliger dissipation term to the time derivative of Zr
 
-    return dZdt
+#     return dZdt

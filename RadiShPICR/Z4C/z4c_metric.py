@@ -15,7 +15,7 @@ class Z4C_Metric(NamedTuple):
     At : jnp.ndarray
     # trace and traceless part of extrinsic curvature
     theta: jnp.ndarray
-    Zr: jnp.ndarray
+    # Zr: jnp.ndarray
     Gamma: jnp.ndarray
     # constraint terms
     kappa: jnp.ndarray
