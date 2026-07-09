@@ -26,7 +26,7 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     dgtdr = first_derivative(gt, metric.dr, parity=1)
     dGammadr = first_derivative(Gamma, metric.dr, parity=-1)
     dthetadr = first_derivative(theta, metric.dr, parity=1)
-    d2chdr2 = second_derivative(chi, metric.dr, parity=1)
+    d2chidr2 = second_derivative(chi, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
     rho = matter_terms.rho
@@ -83,7 +83,7 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     dthetadt += -(alpha * dgrrdr * dchidr) / (2 * (grr ** 2))
     dthetadt += (alpha * dgtdr * dchidr) / (grr * gt)
     dthetadt += -(5 * alpha * (dchidr ** 2)) / (4 * grr * chi)
-    dthetadt += (alpha * d2chdr2) / grr
+    dthetadt += (alpha * d2chidr2) / grr
     # compute the time derivative of theta using the Z4C evolution equations
 
     dthetadt += nu / 64 * (sixth_derivative(theta, metric.dr, parity=1)) * (metric.dr ** 5)
