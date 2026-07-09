@@ -35,31 +35,44 @@ def metric_time_derivatives(metric: Z4C_Metric, matter_terms):
 
 
 def _add_metric_derivative(metric, derivative, scale):
-
-    Arr = metric.Arr + scale * derivative.Arr
-    At = metric.At + scale * derivative.At
-    Arr_trace_free, At_trace_free = trace_free_curvature(Arr, At, metric)
-    # compute the trace-free parts of the curvature after adding the scaled derivative
-
-    return Z4C_Metric(
+    new_metric = Z4C_Metric(
         alpha=metric.alpha + scale * derivative.alpha,
         beta=metric.beta + scale * derivative.beta,
         conformal_grr=metric.conformal_grr + scale * derivative.conformal_grr,
         conformal_gt=metric.conformal_gt + scale * derivative.conformal_gt,
         chi=metric.chi + scale * derivative.chi,
         Kh=metric.Kh + scale * derivative.Kh,
-        Arr=Arr_trace_free,
-        At=At_trace_free,
+        Arr=metric.Arr + scale * derivative.Arr,
+        At =metric.At + scale * derivative.At,
         theta=metric.theta + scale * derivative.theta,
-        # Zr=metric.Zr + scale * derivative.Zr,
         Gamma=metric.Gamma + scale * derivative.Gamma,
         kappa=metric.kappa,
         eta=metric.eta,
         nu=metric.nu,
         r=metric.r,
         dr=metric.dr,
-    )
+    ) # define the new metric with the updated components, but before applying trace-free projection to Arr and At
 
+    Arr_trace_free, At_trace_free = trace_free_curvature(new_metric.Arr, new_metric.At, new_metric)
+    # compute the trace-free parts of the curvature after adding the scaled derivative
+
+    return Z4C_Metric(
+        alpha=new_metric.alpha,
+        beta=new_metric.beta,
+        conformal_grr=new_metric.conformal_grr,
+        conformal_gt=new_metric.conformal_gt,
+        chi=new_metric.chi,
+        Kh=new_metric.Kh,
+        Arr=Arr_trace_free,
+        At=At_trace_free,
+        theta=new_metric.theta,
+        Gamma=new_metric.Gamma,
+        kappa=new_metric.kappa,
+        eta=new_metric.eta,
+        nu=new_metric.nu,
+        r=new_metric.r,
+        dr=new_metric.dr,
+    ) # return the new metric with the trace-free curvature components
 
 def _combine_rk4_derivatives(k1, k2, k3, k4):
     return Z4C_Metric(

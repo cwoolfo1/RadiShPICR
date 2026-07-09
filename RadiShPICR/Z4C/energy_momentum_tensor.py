@@ -74,8 +74,8 @@ def relativistic_mass_energy_density(particles, metric: Z4C_Metric):
     # compute the scaling factor for the energy density based on the metric components
     scaling_factor_p = interpolate_field_to_particles(scaling_factor, r_particle, grid, shape_mode=particle_shape)
     # interpolate the scaling factor to particle positions
-    grr_p = interpolate_field_to_particles(conformal_grr, r_particle, grid, shape_mode=particle_shape)
-    gt_p = interpolate_field_to_particles(conformal_gt, r_particle, grid, shape_mode=particle_shape)
+    grr_p = interpolate_field_to_particles(conformal_grr / chi, r_particle, grid, shape_mode=particle_shape)
+    gt_p = interpolate_field_to_particles(conformal_gt / chi, r_particle, grid, shape_mode=particle_shape)
     # interpolate the conformal metric components to particle positions
 
     particle_volume_element = 4 * jnp.pi * r_particle**2 * scaling_factor_p
@@ -142,8 +142,8 @@ def compute_radial_stress_tensor_component(particles, metric: Z4C_Metric):
     scaling_factor_p = interpolate_field_to_particles(scaling_factor, r_particle, grid, shape_mode=particle_shape)
     # interpolate the scaling factor to particle positions
 
-    grr_p = interpolate_field_to_particles(conformal_grr, r_particle, grid, shape_mode=particle_shape)
-    gt_p = interpolate_field_to_particles(conformal_gt, r_particle, grid, shape_mode=particle_shape)
+    grr_p = interpolate_field_to_particles(conformal_grr / chi, r_particle, grid, shape_mode=particle_shape)
+    gt_p = interpolate_field_to_particles(conformal_gt / chi, r_particle, grid, shape_mode=particle_shape)
     # interpolate the conformal metric components to particle positions
 
     particle_volume_element = 4 * jnp.pi * r_particle**2 * scaling_factor_p
