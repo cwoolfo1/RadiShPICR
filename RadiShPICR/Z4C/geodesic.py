@@ -37,11 +37,11 @@ def compute_geodesic_terms(particles, metric: Z4C_Metric):
     # unpack metric components
     grid = _radial_grid_from_metric(metric)
 
-    dalphadr = first_derivative(alpha, dr)
-    dbetadr = first_derivative(beta, dr)
-    dchidr = first_derivative(chi, dr)
-    dgrrdr = first_derivative(conformal_grr, dr)
-    dgtdr = first_derivative(conformal_gt, dr)
+    dalphadr = first_derivative(alpha, dr, parity=1)
+    dbetadr = first_derivative(beta, dr, parity=-1)
+    dchidr = first_derivative(chi, dr, parity=1)
+    dgrrdr = first_derivative(conformal_grr, dr, parity=1)
+    dgtdr = first_derivative(conformal_gt, dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
     grr_p = interpolate_field_to_particles(conformal_grr, r_particle, grid, shape_mode=particle_shape)
