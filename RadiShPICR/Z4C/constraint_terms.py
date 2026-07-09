@@ -32,22 +32,31 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     rho = matter_terms.rho
     # unpack the matter terms
 
-    # dThetadt = ((At )^2 alpha )/(gt )^2 + (2 Arr * At * alpha )/(
-    #    grr * gt ) - 2 \[Kappa]1 * alpha * theta  + 
-    #    4/3 alpha * (theta)^2 + 4/3 alpha * theta* Kh + 1/3 alpha * Kh^2 - 
-    #    8 \[Pi] alpha *rho *-((2 alpha * chi  )/(r^2 grr )) - (
-    #    2 grr * alpha * chi  )/(r^2 (gt )^2) + (4 alpha * chi  )/(
-    #    r^2 gt ) + (grr * alpha * Gamma * chi  )/(r gt ) + (
-    #    alpha * chi *  dgrrdr )/(r (grr )^2) - (3 alpha * chi *  dgrrdr )/(
-    #    2 r grr * gt ) + (alpha * Gamma * chi *  dgrrdr )/(2 grr ) + (
-    #    2 alpha * chi *  dgtdr )/(r * (gt )^2) - (
-    #    3 alpha * chi *  dgtdr )/(r * grr * gt ) + (
-    #    alpha * chi *  dgrrdr * dgtdr )/(2 ((grr )^2) * gt ) - (
-    #    3 alpha * chi *  (dgtdr)^2)/(4 grr * (gt)^2) + beta * dthetadr + 
-    #    1/2 alpha * chi *  dGammadr + (2 alpha * dchidr)/(r grr) - (
-    #    alpha * dgrrdr * dchidr )/(2 (grr )^2) + (alpha * dgtdr * dchidr)/(
-    #    grr * gt ) - (5 alpha * (dchidr )^2)/(4 grr * chi  ) + (
-    #    alpha * d2chidr2)/grr;
+    # dThetadt = ((At )^2 alpha )/(gt )^2 
+    # + (2 Arr * At * alpha )/(grr * gt ) 
+    # - 2 \[Kappa]1 * alpha * theta 
+    #  +  4/3 alpha * (theta)^2 
+    # + 4/3 alpha * theta* Kh 
+    # + 1/3 alpha * Kh^2 
+    # - 8 \[Pi] alpha *rho
+    # -((2 alpha * chi  )/(r^2 grr )) 
+    # - (2 grr * alpha * chi  )/(r^2 (gt )^2) 
+    # + (4 alpha * chi  )/(r^2 gt ) 
+    # + (grr * alpha * Gamma * chi  )/(r gt ) 
+    # + (alpha * chi *  dgrrdr )/(r (grr )^2) 
+    # - (3 alpha * chi *  dgrrdr )/(2 r grr * gt ) 
+    # + (alpha * Gamma * chi *  dgrrdr )/(2 grr ) 
+    # + (2 alpha * chi *  dgtdr )/(r * (gt )^2) 
+    # - (3 alpha * chi *  dgtdr )/(r * grr * gt )
+    #  + (alpha * chi *  dgrrdr * dgtdr )/(2 ((grr )^2) * gt )
+    #  - (3 alpha * chi *  (dgtdr)^2)/(4 grr * (gt)^2) 
+    # + beta * dthetadr 
+    # + 1/2 alpha * chi *  dGammadr 
+    # + (2 alpha * dchidr)/(r grr) 
+    # - (alpha * dgrrdr * dchidr )/(2 (grr )^2)
+    #  + (alpha * dgtdr * dchidr)/(grr * gt ) 
+    # - (5 alpha * (dchidr )^2)/(4 grr * chi  )
+    #  + (alpha * d2chidr2)/grr;
     #   original equation from mathmatica notebook
 
     dthetadt = (At ** 2 * alpha) / (gt ** 2 )

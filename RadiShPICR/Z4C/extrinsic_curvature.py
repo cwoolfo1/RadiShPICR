@@ -85,38 +85,61 @@ def dArrdt(metric: Z4C_Metric, matter_terms):
     dgtdr = first_derivative(gt, metric.dr, parity=1)
     dArrdr = first_derivative(Arr, metric.dr, parity=1)
     dAtdr = first_derivative(At, metric.dr, parity=1)
+    dalphadr = first_derivative(alpha, metric.dr, parity=1)
+    dchidr = first_derivative(chi, metric.dr, parity=1)
+    d2chidr2 = second_derivative(chi, metric.dr, parity=1)
+    d2grrdr2 = second_derivative(grr, metric.dr, parity=1)
+    d2gtdr2 = second_derivative(gt, metric.dr, parity=1)
+    dbetadr = first_derivative(beta, metric.dr, parity=-1)
+    dGammadr = first_derivative(metric.Gamma, metric.dr, parity=-1)
+    d2alphadr2 = second_derivative(alpha, metric.dr, parity=1)
     # compute derivatives of the metric functions using finite difference methods
 
     St = matter_terms.St
     Srr = matter_terms.Srr
     # unpack the matter terms
 
-    # dArrdt = -((2 (Arr)^2 * alpha)/(3 grr)) - (4 (At )^2 grr * alpha)/(
-    #    3 (gt )^2) + (2 Arr * At * alpha)/gt + 4/3 Arr * alpha * theta - (
-    #    4 At * grr * alpha * theta)/(3 gt) + 2/3 Arr * alpha * Kh - (
-    #    2 At * grr * alpha * Kh)/(3 gt) - (8 Arr * beta)/(9 r) + (
-    #    8 At * grr * beta)/(9 r * gt) - (2 alpha * chi * )/(3 r^2) + (
-    #    4 ((grr)^2) * alpha * chi  )/(3 r^2 *(gt)^2) - (
-    #    2 grr * alpha * chi  )/(3 (r^2) * gt ) - 
-    #    16/3 \[Pi] alpha *Srr * chi + (16 \[Pi] grr * alpha *St * chi )/(
-    #    3 gt) - (2 ((grr )^2) * alpha * Gamma * chi )/(3 r * gt) + 
-    #    2/3 beta * dArrdr - (2 grr * beta *dAtdr)/(3 gt) - (
-    #    2 At * beta * dgrrdr)/(3 gt) + (alpha * chi *  dgrrdr)/(
-    #    3 r * grr) - (alpha * chi *  dgrrdr )/(r * gt) + 
-    #    2/3 alpha * Gamma * chi *  
-    #     dgrrdr *+((alpha * chi *  (dgrrdr)^2)/(3 (grr)^2)) + (
-    #    2 At * grr * beta * dgtdr)/(3 (gt )^2) + (
-    #    2 grr * alpha * chi *  dgtdr)/(3 r (gt)^2) + (
-    #    alpha * chi *  dgrrdr * dgtdr)/(6 grr * gt) - (
-    #    alpha * chi *  (dgtdr)^2)/(3 (gt)^2) + (2 chi *  dalphadr)/(
-    #    3 r) + (chi *  dgrrdr * dalphadr)/(3 grr) + (
-    #    chi *  dgtdr * dalphadr)/(3 gt) + 
-    #    8/9 Arr * dbetadr *-((8 At * grr * dbetadr)/(9 gt)) + 
-    #    2/3 grr * alpha * chi *  dGammadr - (alpha * dchidr)/(3 r) - (
-    #    alpha * dgrrdr * dchidr)/(6 grr) - (alpha * dgtdr * dchidr)/(
-    #    6 gt) - 2/3 dalphadr * dchidr *-((alpha * (dchidr )^2)/(6 chi)) - (
-    #    alpha * chi *  d2grrdr2)/(3 grr) + (alpha * chi *  d2gtdr2)/(
-    #    3 gt) - 2/3 chi * d2alphadr2 + 1/3 alpha * d2chidr2;
+    # dArrdt = -((2 (Arr)^2 * alpha)/(3 grr))
+    #  - (4 (At )^2 grr * alpha)/(3 (gt )^2) 
+    #  + (2 Arr * At * alpha)/gt 
+    # + 4/3 Arr * alpha * theta 
+    # - (4 At * grr * alpha * theta)/(3 gt) 
+    # + 2/3 Arr * alpha * Kh
+    #  - (2 At * grr * alpha * Kh)/(3 gt)
+    #  - (8 Arr * beta)/(9 r)
+    #  + ( 8 At * grr * beta)/(9 r * gt)
+    #  - (2 alpha * chi * )/(3 r^2) 
+    # + ( 4 ((grr)^2) * alpha * chi  )/(3 r^2 *(gt)^2)
+    #  - (2 grr * alpha * chi  )/(3 (r^2) * gt )
+    #  - 16/3 \[Pi] alpha *Srr * chi
+    #  + (16 \[Pi] grr * alpha *St * chi )/(3 gt)
+    #  - (2 ((grr )^2) * alpha * Gamma * chi )/(3 r * gt) 
+    # + 2/3 beta * dArrdr 
+    # - (2 grr * beta *dAtdr)/(3 gt) 
+    # - ( 2 At * beta * dgrrdr)/(3 gt)
+    #  + (alpha * chi *  dgrrdr)/( 3 r * grr) 
+    # - (alpha * chi *  dgrrdr )/(r * gt)
+    #  +  2/3 alpha * Gamma * chi * dgrrdr 
+    # +((alpha * chi *  (dgrrdr)^2)/(3 (grr)^2)) 
+    # + (2 At * grr * beta * dgtdr)/(3 (gt )^2) 
+    # + (2 grr * alpha * chi *  dgtdr)/(3 r (gt)^2) 
+    # + ( alpha * chi *  dgrrdr * dgtdr)/(6 grr * gt)
+    #  - ( alpha * chi *  (dgtdr)^2)/(3 (gt)^2)
+    #  + (2 chi *  dalphadr)/( 3 r) 
+    # + (chi *  dgrrdr * dalphadr)/(3 grr)
+    #  + ( chi *  dgtdr * dalphadr)/(3 gt)
+    #  +  8/9 Arr * dbetadr 
+    # -((8 At * grr * dbetadr)/(9 gt))
+    #  +  2/3 grr * alpha * chi *  dGammadr
+    #  - (alpha * dchidr)/(3 r)
+    #  - (  alpha * dgrrdr * dchidr)/(6 grr)
+    #  - (alpha * dgtdr * dchidr)/( 6 gt)
+    #  - 2/3 dalphadr * dchidr 
+    # -((alpha * (dchidr )^2)/(6 chi))
+    #  - ( alpha * chi *  d2grrdr2)/(3 grr)
+    #  + (alpha * chi *  d2gtdr2)/( 3 gt)
+    #  - 2/3 chi * d2alphadr2 
+    # + 1/3 alpha * d2chidr2;
 
     # original expression from mathematica
 
@@ -146,9 +169,24 @@ def dArrdt(metric: Z4C_Metric, matter_terms):
     dArrdt += (2 * At * grr * beta * dgtdr) / (3 * (gt ** 2))
     dArrdt += (2 * grr * alpha * chi * dgtdr) / (3 * metric.r * (gt ** 2))
     dArrdt += (alpha * chi * dgrrdr * dgtdr) / (6 * grr * gt)
-    dArrdt += -(alpha * chi * (dgtdr ** 2)) / (3 * (gt ** 2))  
+    dArrdt += -(alpha * chi * (dgtdr ** 2)) / (3 * (gt ** 2))
+    dArrdt += (2 * chi * dalphadr) / (3 * metric.r)
+    dArrdt += (chi * dgrrdr * dalphadr) / (3 * grr)
+    dArrdt += (chi * dgtdr * dalphadr) / (3 * gt)
+    dArrdt += (8 / 9) * Arr * dbetadr
+    dArrdt += -(8 * At * grr * dbetadr) / (9 * gt)
+    dArrdt += (2 / 3) * grr * alpha * chi * dGammadr
+    dArrdt += -(alpha * dchidr) / (3 * metric.r)
+    dArrdt += -(alpha * dgrrdr * dchidr) / (6 * grr)
+    dArrdt += -(alpha * dgtdr * dchidr) / (6 * gt)
+    dArrdt += -(2 / 3) * dalphadr * dchidr
+    dArrdt += -(alpha * (dchidr ** 2)) / (6 * chi)
+    dArrdt += -(alpha * chi * d2grrdr2) / (3 * grr)
+    dArrdt += (alpha * chi * d2gtdr2) / (3 * gt)
+    dArrdt += -(2 / 3) * chi * d2alphadr2
+    dArrdt += (1 / 3) * alpha * d2chidr2
     # compute the time derivative of Arr using the Z4C evolution equations
-    #      
+
     dArrdt += nu / 64 * (sixth_derivative(Arr, metric.dr, parity=1)) * (metric.dr ** 5)
     # add the Kreiss-Oliger dissipation term to the time derivative of Arr
 
