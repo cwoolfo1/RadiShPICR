@@ -1,6 +1,8 @@
 import jax.numpy as jnp
 from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative, sixth_derivative
-from RadiShPICR.Z4C.z4c_metric import Z4C_Metric  
+from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
+
+CHI_FLOOR_VALUE = 1e-12
 
 
 
@@ -82,7 +84,7 @@ def dthetadt(metric: Z4C_Metric, matter_terms):
     dthetadt += (2 * alpha * dchidr) / (metric.r * grr)
     dthetadt += -(alpha * dgrrdr * dchidr) / (2 * (grr ** 2))
     dthetadt += (alpha * dgtdr * dchidr) / (grr * gt)
-    dthetadt += -(5 * alpha * (dchidr ** 2)) / (4 * grr * chi)
+    dthetadt += -(5 * alpha * (dchidr ** 2)) / (4 * grr * (chi + CHI_FLOOR_VALUE) )
     dthetadt += (alpha * d2chidr2) / grr
     # compute the time derivative of theta using the Z4C evolution equations
 
@@ -140,7 +142,7 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     dGammadt += -(10 * beta) / (3 * (metric.r ** 2) * grr)
     dGammadt += (2 * beta) / (3 * (metric.r ** 2) * gt)
     dGammadt += -kappa * alpha * Gamma
-    dGammadt += -(16 * jnp.pi * matter_terms.Sr * alpha) / chi
+    dGammadt += -(16 * jnp.pi * matter_terms.Sr * alpha) / (chi + CHI_FLOOR_VALUE)
     dGammadt += (Arr * alpha * dgrrdr) / (grr ** 3)
     dGammadt += (kappa * alpha * dgrrdr) / (grr ** 2)
     dGammadt += (4 * beta * dgrrdr) / (3 * metric.r * (grr ** 2))
@@ -152,7 +154,7 @@ def dGammadt(metric: Z4C_Metric, matter_terms):
     dGammadt += (4 * dbetadr) / (3 * metric.r * gt)
     dGammadt += -(dgrrdr * dbetadr) / (3 * (grr ** 2))
     dGammadt += beta * dGammadr
-    dGammadt += -(3 * Arr * alpha * dchidr) / ((grr ** 2) * chi)
+    dGammadt += -(3 * Arr * alpha * dchidr) / ((grr ** 2) * (chi + CHI_FLOOR_VALUE) )
     dGammadt += (4 * d2betadr2) / (3 * grr)
     # compute the time derivative of Gamma using the Z4C evolution equations
 
