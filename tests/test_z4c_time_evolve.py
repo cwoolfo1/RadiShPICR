@@ -20,7 +20,6 @@ def _flat_metric(r):
         Arr=zeros,
         At=zeros,
         theta=zeros,
-        Zr=zeros,
         Gamma=zeros,
         kappa=zeros,
         eta=zeros,
@@ -43,7 +42,6 @@ def _metric_derivative(metric, alpha_value):
         Arr=zeros,
         At=zeros,
         theta=zeros,
-        Zr=zeros,
         Gamma=zeros,
         kappa=zeros,
         eta=zeros,
@@ -65,6 +63,37 @@ def _make_particles():
         uphi=jnp.asarray([0.2, 0.4]),
         shape_mode="nearest",
     )
+
+
+def _assert_algebraic_constraints(metric):
+    conformal_determinant = metric.conformal_grr * metric.conformal_gt**2
+    curvature_trace = (
+        metric.Arr / metric.conformal_grr
+        + 2.0 * metric.At / metric.conformal_gt
+    )
+
+    assert jnp.allclose(conformal_determinant, 1.0)
+    assert jnp.allclose(curvature_trace, 0.0, atol=1.0e-6)
+
+
+def test_unit_determinant_conformal_metric_is_idempotent():
+    from RadiShPICR.Z4C.utils import unit_determinant_conformal_metric
+
+    conformal_grr = jnp.asarray([2.0, 5.0, 0.75])
+    conformal_gt = jnp.asarray([3.0, 0.5, 1.25])
+
+    conformal_grr, conformal_gt = unit_determinant_conformal_metric(
+        conformal_grr,
+        conformal_gt,
+    )
+    projected_again = unit_determinant_conformal_metric(
+        conformal_grr,
+        conformal_gt,
+    )
+
+    assert jnp.allclose(conformal_grr * conformal_gt**2, 1.0)
+    assert jnp.allclose(projected_again[0], conformal_grr)
+    assert jnp.allclose(projected_again[1], conformal_gt)
 
 
 def test_metric_time_derivatives_match_metric_layout():
@@ -115,6 +144,45 @@ def test_rk4_step_preserves_flat_vacuum_metric():
         assert jnp.allclose(updated_field, metric_field)
 
 
+def test_rk4_step_projects_every_metric_stage(monkeypatch):
+    import RadiShPICR.Z4C.time_evolve as time_evolve
+
+    r = jnp.linspace(0.1, 1.0, 8)
+    ones = jnp.ones_like(r)
+    metric = _flat_metric(r)._replace(
+        conformal_grr=2.0 * ones,
+        conformal_gt=3.0 * ones,
+        Arr=0.5 * ones,
+        At=-0.25 * ones,
+    )
+    matter_terms = initialize_vacuum_matter_terms(metric)
+    stage_metrics = []
+
+    def fake_metric_time_derivatives(stage_metric, stage_matter_terms):
+        stage_metrics.append(stage_metric)
+        derivative = _metric_derivative(stage_metric, alpha_value=0.0)
+
+        return derivative._replace(
+            conformal_grr=0.5 * ones,
+            conformal_gt=0.25 * ones,
+            Arr=0.4 * ones,
+            At=-0.3 * ones,
+        )
+
+    monkeypatch.setattr(
+        time_evolve,
+        "metric_time_derivatives",
+        fake_metric_time_derivatives,
+    )
+
+    updated = time_evolve.rk4_step(metric, matter_terms, dt=0.1)
+
+    assert len(stage_metrics) == 4
+    for stage_metric in stage_metrics:
+        _assert_algebraic_constraints(stage_metric)
+    _assert_algebraic_constraints(updated)
+
+
 def test_rk4_step_uses_classic_stage_weights(monkeypatch):
     import RadiShPICR.Z4C.time_evolve as time_evolve
 
@@ -138,7 +206,6 @@ def test_rk4_step_uses_classic_stage_weights(monkeypatch):
             Arr=zeros,
             At=zeros,
             theta=zeros,
-            Zr=zeros,
             Gamma=zeros,
             kappa=zeros,
             eta=zeros,
@@ -160,6 +227,75 @@ def test_rk4_step_uses_classic_stage_weights(monkeypatch):
     assert jnp.allclose(updated.beta, metric.beta)
     assert jnp.allclose(updated.r, metric.r)
     assert stage_values == []
+
+
+def test_particles_rk4_step_projects_every_metric_stage(monkeypatch):
+    import RadiShPICR.Z4C.time_evolve as time_evolve
+
+    r = jnp.linspace(0.1, 1.0, 8)
+    ones = jnp.ones_like(r)
+    metric = _flat_metric(r)._replace(
+        conformal_grr=2.0 * ones,
+        conformal_gt=3.0 * ones,
+        Arr=0.5 * ones,
+        At=-0.25 * ones,
+    )
+    particles = _make_particles()
+    stage_metrics = []
+
+    def fake_compute_geodesic_terms(stage_particles, stage_metric):
+        stage_metrics.append(stage_metric)
+        particle_zeros = jnp.zeros_like(stage_particles.r)
+
+        return particle_zeros, particle_zeros, particle_zeros, particle_zeros
+
+    def fake_compute_radial_matter_terms(stage_particles, stage_metric):
+        metric_zeros = jnp.zeros_like(stage_metric.r)
+
+        return MatterTerms(
+            rho=metric_zeros,
+            Srr=metric_zeros,
+            Stt=metric_zeros,
+            Sr=metric_zeros,
+            St=metric_zeros,
+        )
+
+    def fake_metric_time_derivatives(stage_metric, stage_matter_terms):
+        derivative = _metric_derivative(stage_metric, alpha_value=0.0)
+
+        return derivative._replace(
+            conformal_grr=0.5 * ones,
+            conformal_gt=0.25 * ones,
+            Arr=0.4 * ones,
+            At=-0.3 * ones,
+        )
+
+    monkeypatch.setattr(
+        time_evolve,
+        "compute_geodesic_terms",
+        fake_compute_geodesic_terms,
+    )
+    monkeypatch.setattr(
+        time_evolve,
+        "compute_radial_matter_terms",
+        fake_compute_radial_matter_terms,
+    )
+    monkeypatch.setattr(
+        time_evolve,
+        "metric_time_derivatives",
+        fake_metric_time_derivatives,
+    )
+
+    _, updated_metric = time_evolve.particles_rk4_step(
+        particles,
+        metric,
+        dt=0.1,
+    )
+
+    assert len(stage_metrics) == 4
+    for stage_metric in stage_metrics:
+        _assert_algebraic_constraints(stage_metric)
+    _assert_algebraic_constraints(updated_metric)
 
 
 def test_particles_rk4_step_updates_source_backed_particle_class(monkeypatch):

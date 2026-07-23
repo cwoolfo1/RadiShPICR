@@ -18,7 +18,6 @@ def test_initialize_vacuum_matter_terms_matches_metric_grid():
         Arr=zeros,
         At=zeros,
         theta=zeros,
-        Zr=zeros,
         Gamma=zeros,
         kappa=zeros,
         eta=zeros,

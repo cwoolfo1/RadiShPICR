@@ -3,6 +3,17 @@ from jax import jit
 
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 
+
+def unit_determinant_conformal_metric(conformal_grr, conformal_gt):
+    conformal_determinant = conformal_grr * conformal_gt**2
+    determinant_scale = jnp.cbrt(conformal_determinant)
+
+    conformal_grr = conformal_grr / determinant_scale
+    conformal_gt = conformal_gt / determinant_scale
+
+    return conformal_grr, conformal_gt
+
+
 def trace_free_curvature(Arr, At, metric: Z4C_Metric):
     conformal_grr = metric.conformal_grr
     conformal_gt = metric.conformal_gt

@@ -7,7 +7,10 @@ from RadiShPICR.Z4C.spatial_metric import dchidt, dgrrdt, dgtdt
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 from RadiShPICR.Z4C.energy_momentum_tensor import compute_radial_matter_terms
 from RadiShPICR.Z4C.geodesic import compute_geodesic_terms
-from RadiShPICR.Z4C.utils import trace_free_curvature
+from RadiShPICR.Z4C.utils import (
+    trace_free_curvature,
+    unit_determinant_conformal_metric,
+)
 
 
 def metric_time_derivatives(metric: Z4C_Metric, matter_terms):
@@ -24,14 +27,35 @@ def metric_time_derivatives(metric: Z4C_Metric, matter_terms):
         Arr=dArrdt(metric, matter_terms),
         At=dAtdt(metric, matter_terms),
         theta=dthetadt(metric, matter_terms),
-        # Zr=zeros, #dZdt(metric, matter_terms),
         Gamma=dGammadt(metric, matter_terms),
-        kappa=0.0,
-        eta=0.0,
-        nu=0.0,
+        kappa=zero_dr,
+        eta=zero_dr,
+        nu=zero_dr,
         r=zeros,
         dr=zero_dr,
     )
+
+
+def _enforce_algebraic_constraints(metric):
+    conformal_grr, conformal_gt = unit_determinant_conformal_metric(
+        metric.conformal_grr,
+        metric.conformal_gt,
+    )
+    # Enforce det(conformal_gamma) = conformal_grr * conformal_gt**2 = 1.
+
+    constrained_metric = metric._replace(
+        conformal_grr=conformal_grr,
+        conformal_gt=conformal_gt,
+    )
+
+    Arr, At = trace_free_curvature(
+        constrained_metric.Arr,
+        constrained_metric.At,
+        constrained_metric,
+    )
+    # Use the projected conformal metric when removing the curvature trace.
+
+    return constrained_metric._replace(Arr=Arr, At=At)
 
 
 def _add_metric_derivative(metric, derivative, scale):
@@ -43,7 +67,7 @@ def _add_metric_derivative(metric, derivative, scale):
         chi=metric.chi + scale * derivative.chi,
         Kh=metric.Kh + scale * derivative.Kh,
         Arr=metric.Arr + scale * derivative.Arr,
-        At =metric.At + scale * derivative.At,
+        At=metric.At + scale * derivative.At,
         theta=metric.theta + scale * derivative.theta,
         Gamma=metric.Gamma + scale * derivative.Gamma,
         kappa=metric.kappa,
@@ -51,28 +75,10 @@ def _add_metric_derivative(metric, derivative, scale):
         nu=metric.nu,
         r=metric.r,
         dr=metric.dr,
-    ) # define the new metric with the updated components, but before applying trace-free projection to Arr and At
+    )
+    # Construct the RK stage before imposing the Z4C algebraic constraints.
 
-    Arr_trace_free, At_trace_free = trace_free_curvature(new_metric.Arr, new_metric.At, new_metric)
-    # compute the trace-free parts of the curvature after adding the scaled derivative
-
-    return Z4C_Metric(
-        alpha=new_metric.alpha,
-        beta=new_metric.beta,
-        conformal_grr=new_metric.conformal_grr,
-        conformal_gt=new_metric.conformal_gt,
-        chi=new_metric.chi,
-        Kh=new_metric.Kh,
-        Arr=Arr_trace_free,
-        At=At_trace_free,
-        theta=new_metric.theta,
-        Gamma=new_metric.Gamma,
-        kappa=new_metric.kappa,
-        eta=new_metric.eta,
-        nu=new_metric.nu,
-        r=new_metric.r,
-        dr=new_metric.dr,
-    ) # return the new metric with the trace-free curvature components
+    return _enforce_algebraic_constraints(new_metric)
 
 def _combine_rk4_derivatives(k1, k2, k3, k4):
     return Z4C_Metric(
@@ -95,7 +101,6 @@ def _combine_rk4_derivatives(k1, k2, k3, k4):
         Arr=k1.Arr + 2.0 * k2.Arr + 2.0 * k3.Arr + k4.Arr,
         At=k1.At + 2.0 * k2.At + 2.0 * k3.At + k4.At,
         theta=k1.theta + 2.0 * k2.theta + 2.0 * k3.theta + k4.theta,
-        # Zr=k1.Zr + 2.0 * k2.Zr + 2.0 * k3.Zr + k4.Zr,
         Gamma=k1.Gamma + 2.0 * k2.Gamma + 2.0 * k3.Gamma + k4.Gamma,
         kappa=k1.kappa,
         eta=k1.eta,
@@ -106,6 +111,9 @@ def _combine_rk4_derivatives(k1, k2, k3, k4):
 
 
 def rk4_step(metric: Z4C_Metric, matter_terms, dt):
+    metric = _enforce_algebraic_constraints(metric)
+    # Every RK right-hand side is evaluated from a constraint-projected metric.
+
     k1 = metric_time_derivatives(metric, matter_terms)
 
     metric_k2 = _add_metric_derivative(metric, k1, 0.5 * dt)
@@ -137,6 +145,9 @@ def _copy_particle_state(particles, r, phi, ur, uphi):
 
 
 def particles_rk4_step(particles, metric: Z4C_Metric, dt):
+    metric = _enforce_algebraic_constraints(metric)
+    # Use the same projected metric for the stage-one geodesic and matter terms.
+
     r0, phi0 = particles.get_positions()
     ur0, uphi0 = particles.get_velocities()
 
