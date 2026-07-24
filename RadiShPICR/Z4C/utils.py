@@ -5,11 +5,10 @@ from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 
 
 def unit_determinant_conformal_metric(conformal_grr, conformal_gt):
-    conformal_determinant = conformal_grr * conformal_gt**2
-    determinant_scale = jnp.cbrt(conformal_determinant)
+    det_gamma_tilde = ( conformal_grr * conformal_gt**2 )**(1/3)
 
-    conformal_grr = conformal_grr / determinant_scale
-    conformal_gt = conformal_gt / determinant_scale
+    conformal_grr = conformal_grr / det_gamma_tilde
+    conformal_gt = conformal_gt / det_gamma_tilde
 
     return conformal_grr, conformal_gt
 

@@ -3,6 +3,8 @@ from typing import NamedTuple
 import jax.numpy as jnp
 
 from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
+from RadiShPICR.Z4C.derivatives import first_derivative, second_derivative
+from RadiShPICR.Z4C.derivatives import first_derivative
 from RadiShPICR.Z4C.z4c_metric import Z4C_Metric
 from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
 from RadiShPICR.particles.particle_shapes import shape_weights_at_point
@@ -154,3 +156,33 @@ def compute_radial_stress_tensor_component(particles, metric: Z4C_Metric):
 
     return jnp.sum(particles.get_mass() * weights * ur**2 / (particle_volume_element * lorentz_factor), axis=1)
     # compute the total radial stress tensor component by summing over all particles, weighted by their mass,
+
+
+
+
+def compute_hamiltonian_constraint(metric: Z4C_Metric):
+
+    # ASSUMES VACUUM and IGNORES THETA FOR NOW. NEEDS TO BE FIXED FOR NON-VACUUM CASES
+    
+    chi = metric.chi
+    grr = metric.conformal_grr
+    gt = metric.conformal_gt
+    Arr = metric.Arr
+    At = metric.At
+    K  = metric.Kh
+    r  = metric.r
+
+    dchidr = first_derivative(chi, metric.dr, parity=1)
+    dgrrdr = first_derivative(grr, metric.dr, parity=1)
+    dgtdr = first_derivative(gt, metric.dr, parity=1)
+    d2gtdr     = second_derivative(gt, metric.dr, parity=1 )
+    d2chidr    = second_derivative(chi, metric.dr, parity=1)
+
+
+    constraint =  -(Arr**2/grr**2) + (2*d2chidr)/grr - (5*dchidr**2)/(2*(jnp.maximum(chi, 1e-10))*grr) - (2*At**2)/gt**2 + (2*K**2)/3 + \
+        dchidr*(-(dgrrdr/grr**2) + (2*dgtdr)/(grr*gt) + 4/(grr*r)) + \
+        chi*(dgtdr**2/(2*grr*gt**2) + (dgrrdr*dgtdr)/(grr**2*gt) - (2*d2gtdr)/(grr*gt) - 2/(grr*r**2) + 2/(gt*r**2) + 
+        (2*dgrrdr)/(grr**2*r) - (6*dgtdr)/(grr*gt*r))
+
+
+    return constraint

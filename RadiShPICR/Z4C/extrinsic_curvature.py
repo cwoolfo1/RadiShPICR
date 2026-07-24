@@ -182,7 +182,7 @@ def dArrdt(metric: Z4C_Metric, matter_terms):
     dArrdt += -(alpha * dgrrdr * dchidr) / (6 * grr)
     dArrdt += -(alpha * dgtdr * dchidr) / (6 * gt)
     dArrdt += -(2 / 3) * dalphadr * dchidr
-    dArrdt += -(alpha * (dchidr ** 2)) / (6 * (chi + CHI_FLOOR_VALUE) )
+    dArrdt += -(alpha * (dchidr ** 2)) / (6 * jnp.maximum(chi, CHI_FLOOR_VALUE))
     dArrdt += -(alpha * chi * d2grrdr2) / (3 * grr)
     dArrdt += (alpha * chi * d2gtdr2) / (3 * gt)
     dArrdt += -(2 / 3) * chi * d2alphadr2
@@ -307,7 +307,7 @@ def dAtdt(metric: Z4C_Metric, matter_terms):
     dAtdt += (gt * alpha * dgrrdr * dchidr) / (12 * (grr ** 2))
     dAtdt += (alpha * dgtdr * dchidr) / (12 * grr)
     dAtdt += (gt * dalphadr * dchidr) / (3 * grr)
-    dAtdt += (gt * alpha * (dchidr ** 2)) / (12 * grr * (chi + CHI_FLOOR_VALUE))
+    dAtdt += (gt * alpha * (dchidr ** 2)) / (12 * grr * jnp.maximum(chi, CHI_FLOOR_VALUE))
     dAtdt += (gt * alpha * chi * d2grrdr2) / (6 * (grr ** 2))
     dAtdt += -(alpha * chi * d2gtdr2) / (6 * grr)
     dAtdt += (gt * chi * d2alphadr2) / (3 * grr)
