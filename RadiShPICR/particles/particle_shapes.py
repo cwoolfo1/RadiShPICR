@@ -6,6 +6,20 @@ import jax.numpy as jnp
 # from RadiShPICR.ConstraintBasedRelativity.utils import nearest_interior_index
 
 
+def _quadratic_shape_weight(delta):
+    """Evaluate the one-dimensional quadratic TSC shape function."""
+
+    absolute_delta = jnp.abs(delta)
+    center_weight = 0.75 - delta**2
+    outer_weight = 0.5 * (1.5 - absolute_delta) ** 2
+
+    return jnp.where(
+        absolute_delta <= 0.5,
+        center_weight,
+        jnp.where(absolute_delta <= 1.5, outer_weight, 0.0),
+    )
+
+
 def nearest_interior_index(radial_positions, grid):
     """Map particles to the nearest interior grid point.
 
@@ -31,15 +45,12 @@ def radial_shape_stencil(radial_positions, grid, shape_mode="nearest"):
     anchor = jnp.rint(floating_index).astype(jnp.int32)
     delta = floating_index - anchor.astype(radial_positions.dtype)
 
-    raw_weights = jnp.stack(
-        [
-            0.5 * (0.5 - delta) ** 2,
-            0.75 - delta**2,
-            0.5 * (0.5 + delta) ** 2,
-        ],
-        axis=0,
-    )
     offsets = jnp.asarray([-1, 0, 1], dtype=anchor.dtype)
+    stencil_delta = (
+        delta[jnp.newaxis, :]
+        - offsets[:, jnp.newaxis].astype(radial_positions.dtype)
+    )
+    raw_weights = _quadratic_shape_weight(stencil_delta)
     raw_indices = anchor[jnp.newaxis, :] + offsets[:, jnp.newaxis]
 
     first_interior = jnp.asarray(1, dtype=raw_indices.dtype)
@@ -89,12 +100,4 @@ def shape_weights_at_point(radial_positions, radial_coordinate, dr, shape_mode="
         return jnp.where(jnp.abs(radial_positions - radial_coordinate) < 0.5 * dr, 1.0, 0.0)
 
     delta = (radial_positions - radial_coordinate) / dr
-    center_particles = jnp.where(jnp.abs(delta) < 0.5, 0.75 - delta**2, 0.0)
-    left_particles = jnp.where(
-        (delta >= -1.5) & (delta < -0.5), 0.5 * (0.5 - delta) ** 2, 0.0
-    )
-    right_particles = jnp.where(
-        (delta > 0.5) & (delta <= 1.5), 0.5 * (0.5 + delta) ** 2, 0.0
-    )
-
-    return center_particles + left_particles + right_particles
+    return _quadratic_shape_weight(delta)
