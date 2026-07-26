@@ -2,16 +2,18 @@
 
 from RadiShPICR.ConstraintBasedRelativity.evolve import step, step_rk4
 from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid, build_radial_grid
-from RadiShPICR.ConstraintBasedRelativity.solve_metric import (
-    calculate_metric,
-    calculate_metric_with_particle_rescaling,
+from RadiShPICR.ConstraintBasedRelativity.solve_metric import calculate_metric
+from RadiShPICR.ConstraintBasedRelativity.vacuum_conditions import (
+    rescale_to_schwarzschild_coordinates,
+    schwarzschild_rescale_factors,
 )
 
 __all__ = [
     "RadialGrid",
     "build_radial_grid",
     "calculate_metric",
-    "calculate_metric_with_particle_rescaling",
+    "rescale_to_schwarzschild_coordinates",
+    "schwarzschild_rescale_factors",
     "step",
     "step_rk4",
 ]

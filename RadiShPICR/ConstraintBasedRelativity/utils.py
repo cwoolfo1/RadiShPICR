@@ -19,6 +19,17 @@ def pad_value(value, padding=1.0e-15):
     return value + padding_value
 
 
+def radial_shell_volume(A, radial_coordinate, dr):
+    """Proper volume of the spherical cell centered at ``radial_coordinate``."""
+
+    inner_radius = jnp.maximum(radial_coordinate - 0.5 * dr, 0.0)
+    outer_radius = radial_coordinate + 0.5 * dr
+    coordinate_volume = (4.0 * jnp.pi / 3.0) * (
+        outer_radius**3 - inner_radius**3
+    )
+
+    return A**3 * coordinate_volume
+
 
 def nearest_interior_index(radial_positions, grid):
     """Map particles to the nearest interior grid point.

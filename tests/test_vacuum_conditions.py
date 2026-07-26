@@ -4,7 +4,8 @@ from RadiShPICR.particles import particle_species
 from RadiShPICR.ConstraintBasedRelativity.vacuum_conditions import (
     reissner_nordstrom_A,
     reissner_nordstrom_lapse,
-    rescale_metric_to_vacuum_boundary,
+    rescale_to_schwarzschild_coordinates,
+    schwarzschild_rescale_factors,
     total_particle_charge,
     total_particle_mass,
     vacuum_rescale_factors,
@@ -65,14 +66,14 @@ def test_total_particle_mass_and_charge_sum_getter_values_over_particles():
     assert jnp.allclose(total_particle_charge(particles), 2.25)
 
 
-def test_vacuum_rescale_matches_outer_boundary_cell():
-    particles = make_species(charge=0.4, mass=1.0, weight=0.25)
+def test_schwarzschild_rescale_matches_outer_boundary_cell():
+    particles = make_species(charge=0.0, mass=1.0, weight=0.25)
     r_grid = jnp.asarray([0.0, 1.0, 2.0, 3.0])
     A = jnp.asarray([1.0, 1.1, 1.2, 1.3])
     phi = jnp.asarray([0.0, -0.01, -0.02, -0.03])
     alpha = jnp.asarray([1.0, 0.95, 0.90, 0.85])
     Krr = jnp.asarray([0.0, 0.01, 0.02, 0.03])
-    beta_over_r = jnp.asarray([0.0, 0.02, 0.04, 0.06])
+    beta_over_r = jnp.asarray([0.06, 0.04, 0.02, 0.0])
     Er = jnp.asarray([0.0, 0.1, 0.2, 0.3])
     source_terms = (
         jnp.asarray([0.0, 1.0, 2.0, 0.0]),
@@ -82,8 +83,13 @@ def test_vacuum_rescale_matches_outer_boundary_cell():
     )
     U_state = (A, phi, alpha, Krr, beta_over_r, Er, source_terms, r_grid)
 
-    matched, rescaled_particles, X_r, X_t = (
-        rescale_metric_to_vacuum_boundary(U_state, particles)
+    exterior_mass = total_particle_mass(particles)
+    matched, rescaled_particles, r_matched = (
+        rescale_to_schwarzschild_coordinates(
+            U_state,
+            particles,
+            exterior_mass,
+        )
     )
     (
         A_matched,
@@ -100,12 +106,12 @@ def test_vacuum_rescale_matches_outer_boundary_cell():
     expected_A_outer = reissner_nordstrom_A(
         r_matched[-1],
         total_particle_mass(particles),
-        total_particle_charge(particles),
+        0.0,
     )
     expected_alpha_outer = reissner_nordstrom_lapse(
         r_matched[-1],
         total_particle_mass(particles),
-        total_particle_charge(particles),
+        0.0,
     )
 
     assert jnp.allclose(A_matched[-1], expected_A_outer)
@@ -113,23 +119,18 @@ def test_vacuum_rescale_matches_outer_boundary_cell():
     assert jnp.allclose(mass_density, source_terms[0])
     assert jnp.allclose(charge_density, source_terms[1])
 
-    expected_X_r, expected_X_t = vacuum_rescale_factors(
-        A[-1],
-        alpha[-1],
-        r_grid[-1],
-        total_particle_mass(particles),
-        total_particle_charge(particles),
+    expected_X_r, expected_X_t = schwarzschild_rescale_factors(
+        U_state,
+        exterior_mass,
     )
-    assert jnp.allclose(X_r, expected_X_r)
-    assert jnp.allclose(X_t, expected_X_t)
-    assert jnp.allclose(phi_matched, phi / X_r ** (3.0 / 2.0))
-    assert jnp.allclose(Krr_matched, Krr * X_r**2 / X_t)
-    assert jnp.allclose(beta_matched, beta_over_r / X_t)
-    assert jnp.allclose(Er_matched, X_r * Er)
-    assert jnp.allclose(Srr_matched, source_terms[2] / X_r**2)
-    assert jnp.allclose(Sr_matched, source_terms[3] / X_r)
-    assert jnp.allclose(rescaled_particles.r, X_r * particles.r)
-    assert jnp.allclose(rescaled_particles.ur, particles.ur / X_r)
+    assert jnp.allclose(phi_matched, phi / expected_X_r ** (3.0 / 2.0))
+    assert jnp.allclose(Krr_matched, Krr)
+    assert jnp.allclose(beta_matched, beta_over_r / expected_X_t)
+    assert jnp.allclose(Er_matched, expected_X_r * Er)
+    assert jnp.allclose(Srr_matched, source_terms[2] / expected_X_r**2)
+    assert jnp.allclose(Sr_matched, source_terms[3] / expected_X_r)
+    assert jnp.allclose(rescaled_particles.r, expected_X_r * particles.r)
+    assert jnp.allclose(rescaled_particles.ur, particles.ur / expected_X_r)
     assert jnp.allclose(rescaled_particles.phi, particles.phi)
     assert jnp.allclose(rescaled_particles.uphi, particles.uphi)
 
@@ -146,9 +147,10 @@ def test_vacuum_rescale_pads_zero_lapse_rescaling_denominator():
     source_terms = tuple(jnp.zeros_like(r_grid) for _ in range(4))
     U_state = (A, phi, alpha, Krr, beta_over_r, Er, source_terms, r_grid)
 
-    matched, rescaled_particles, X_r, X_t = (
-        rescale_metric_to_vacuum_boundary(U_state, particles)
+    matched, rescaled_particles, r_matched = (
+        rescale_to_schwarzschild_coordinates(U_state, particles, 0.0)
     )
+    X_r, X_t = schwarzschild_rescale_factors(U_state, 0.0)
     A_matched, phi_matched, alpha_matched, Krr_matched, beta_matched, Er_matched, matched_sources, r_matched = matched
     mass_density, charge_density, Srr_matched, Sr_matched = matched_sources
 
@@ -205,8 +207,16 @@ def test_covariant_particle_and_source_rescaling_preserves_lorentz_factor():
         r_grid,
     )
 
-    matched, rescaled_particles, X_r, X_t = (
-        rescale_metric_to_vacuum_boundary(U_state, particles)
+    matched, rescaled_particles, _ = (
+        rescale_to_schwarzschild_coordinates(
+            U_state,
+            particles,
+            total_particle_mass(particles),
+        )
+    )
+    X_r, X_t = schwarzschild_rescale_factors(
+        U_state,
+        total_particle_mass(particles),
     )
     A_matched, _, _, _, _, _, matched_sources, _ = matched
     _, _, Srr_matched, Sr_matched = matched_sources
@@ -239,11 +249,16 @@ def test_covariant_particle_and_source_rescaling_preserves_lorentz_factor():
         source_terms,
         r_grid,
     )
-    matched_2, rescaled_particles_2, X_r_2, X_t_2 = (
-        rescale_metric_to_vacuum_boundary(
+    matched_2, rescaled_particles_2, _ = (
+        rescale_to_schwarzschild_coordinates(
             U_state_different_time_scale,
             particles,
+            total_particle_mass(particles),
         )
+    )
+    X_r_2, X_t_2 = schwarzschild_rescale_factors(
+        U_state_different_time_scale,
+        total_particle_mass(particles),
     )
 
     assert jnp.allclose(X_r_2, X_r)

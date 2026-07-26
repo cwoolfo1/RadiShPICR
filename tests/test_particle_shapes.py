@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
 from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
+from RadiShPICR.ConstraintBasedRelativity.utils import radial_shell_volume
 from RadiShPICR.particles import particle_species
 from RadiShPICR.particles.particle_shapes import (
     radial_shape_stencil,
@@ -100,8 +101,9 @@ def test_quadratic_source_deposition_conserves_particle_mass_and_charge():
         lambda r: charge_density_at_point(particles, jnp.asarray(1.0), r, grid.dr)
     )(grid.r_full)
 
-    safe_radius = jnp.maximum(grid.r_full, 0.5 * grid.dr)
-    cell_volume = 4.0 * jnp.pi * safe_radius**2 * grid.dr
+    cell_volume = jax.vmap(
+        lambda r: radial_shell_volume(jnp.asarray(1.0), r, grid.dr)
+    )(grid.r_full)
     deposited_mass = jnp.sum(mass_density * cell_volume)
     deposited_charge = jnp.sum(charge_density * cell_volume)
 

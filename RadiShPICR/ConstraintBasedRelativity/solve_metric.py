@@ -5,7 +5,6 @@ from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_a
 from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
-from RadiShPICR.ConstraintBasedRelativity.vacuum_conditions import rescale_metric_to_vacuum_boundary
 
 
 def _safe_radius(r, dr):
@@ -28,7 +27,9 @@ def dr_sqrt_phi(U_state, dr=None):
         safe_r = _safe_radius(r, dr)
 
     interior_term = -2.0 * jnp.pi * jnp.sqrt(A) ** 5 * mass_energy_density - 2.0 * phi / safe_r
-    center_term = -jnp.pi * jnp.sqrt(A) ** 5 * mass_energy_density / 3.0
+    center_term = (
+        -2.0 * jnp.pi * jnp.sqrt(A) ** 5 * mass_energy_density / 3.0
+    )
 
     return jnp.where(r == 0.0, center_term, interior_term)
 
@@ -174,7 +175,7 @@ def heuns_method(U_state, dr, particles):
     )
 
 
-def calculate_metric_with_particle_rescaling(particles, r_grid, dr):
+def calculate_metric(particles, r_grid, dr):
     r_grid = jnp.asarray(r_grid)
     dr = jnp.asarray(dr, dtype=r_grid.dtype)
 
@@ -289,16 +290,6 @@ def calculate_metric_with_particle_rescaling(particles, r_grid, dr):
         Er_values,
         source_terms,
         r_values,
-    )
-
-    return rescale_metric_to_vacuum_boundary(U_state, particles)
-
-
-def calculate_metric(particles, r_grid, dr):
-    U_state, _, _, _ = calculate_metric_with_particle_rescaling(
-        particles,
-        r_grid,
-        dr,
     )
 
     return U_state

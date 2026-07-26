@@ -6,15 +6,15 @@ from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_a
 from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.evolve import step, step_rk4
 from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
-from RadiShPICR.ConstraintBasedRelativity import (
-    calculate_metric,
-    calculate_metric_with_particle_rescaling,
-)
+from RadiShPICR.ConstraintBasedRelativity import calculate_metric
 from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
 from RadiShPICR.ConstraintBasedRelativity.geodesic import compute_geodesic_terms
 from RadiShPICR.ConstraintBasedRelativity.lorentz_force import compute_lorentz_terms
-from RadiShPICR.ConstraintBasedRelativity.solve_metric import beta_over_r_from_integral
+from RadiShPICR.ConstraintBasedRelativity.solve_metric import (
+    beta_over_r_from_integral,
+    dr_sqrt_phi,
+)
 from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
 from RadiShPICR.particles import particle_species
 
@@ -44,7 +44,7 @@ def make_interpolation_grid(r_grid):
     )
 
 
-def make_metric_rescaling_result(stage_particles, r_grid, Er=None, X_r=1.0, X_t=1.0):
+def make_metric_result(r_grid, Er=None):
     zeros = jnp.zeros_like(r_grid)
     if Er is None:
         Er = zeros
@@ -60,7 +60,7 @@ def make_metric_rescaling_result(stage_particles, r_grid, Er=None, X_r=1.0, X_t=
         r_grid,
     )
 
-    return U_state, stage_particles, jnp.asarray(X_r), jnp.asarray(X_t)
+    return U_state
 
 
 def test_particle_species_current_api():
@@ -157,6 +157,20 @@ def test_beta_over_r_uses_trapezoidal_tail_integral():
     assert jnp.allclose(beta_over_r, expected_beta_over_r)
 
 
+def test_hamiltonian_constraint_uses_regular_center_limit():
+    r_grid = jnp.asarray([0.0, 0.5])
+    A = jnp.asarray([1.2, 1.2])
+    rho = jnp.asarray([0.4, 0.4])
+    zeros = jnp.zeros_like(r_grid)
+    source_terms = (rho, zeros, zeros, zeros)
+    U_state = (A, zeros, jnp.ones_like(A), zeros, zeros, zeros, source_terms, r_grid)
+
+    dphi_dr = dr_sqrt_phi(U_state, r_grid[1] - r_grid[0])
+    expected_center = -(2.0 * jnp.pi / 3.0) * A[0] ** (5.0 / 2.0) * rho[0]
+
+    assert jnp.allclose(dphi_dr[0], expected_center)
+
+
 def test_force_terms_consume_ustate_directly():
     particles = make_species(charge=1.0, mass=2.0)
     r_grid = jnp.linspace(0.0, 1.0, 5)
@@ -214,7 +228,7 @@ def test_calculate_metric_jit_matches_eager_output():
     assert jnp.allclose(jitted_U_state[7], eager_U_state[7])
 
 
-def test_metric_particle_rescaling_jit_matches_eager_and_keeps_input_unchanged():
+def test_calculate_metric_keeps_particle_state_unchanged():
     eager_particles = make_species(charge=0.0, mass=1.0, weight=0.0)
     jitted_particles = make_species(charge=0.0, mass=1.0, weight=0.0)
     eager_r = eager_particles.r.copy()
@@ -224,33 +238,9 @@ def test_metric_particle_rescaling_jit_matches_eager_and_keeps_input_unchanged()
     r_grid = jnp.linspace(0.0, 1.0, 5)
     dr = r_grid[1] - r_grid[0]
 
-    eager_result = calculate_metric_with_particle_rescaling(
-        eager_particles,
-        r_grid,
-        dr,
-    )
-    jitted_result = jax.jit(calculate_metric_with_particle_rescaling)(
-        jitted_particles,
-        r_grid,
-        dr,
-    )
-    eager_U_state, eager_rescaled_particles, eager_X_r, eager_X_t = eager_result
-    jitted_U_state, jitted_rescaled_particles, jitted_X_r, jitted_X_t = (
-        jitted_result
-    )
+    calculate_metric(eager_particles, r_grid, dr)
+    jax.jit(calculate_metric)(jitted_particles, r_grid, dr)
 
-    for eager_value, jitted_value in zip(eager_U_state[:6], jitted_U_state[:6]):
-        assert jnp.allclose(jitted_value, eager_value)
-    for eager_source, jitted_source in zip(
-        eager_U_state[6],
-        jitted_U_state[6],
-    ):
-        assert jnp.allclose(jitted_source, eager_source)
-    assert jnp.allclose(jitted_U_state[7], eager_U_state[7])
-    assert jnp.allclose(jitted_rescaled_particles.r, eager_rescaled_particles.r)
-    assert jnp.allclose(jitted_rescaled_particles.ur, eager_rescaled_particles.ur)
-    assert jnp.allclose(jitted_X_r, eager_X_r)
-    assert jnp.allclose(jitted_X_t, eager_X_t)
     assert jnp.allclose(eager_particles.r, eager_r)
     assert jnp.allclose(eager_particles.ur, eager_ur)
     assert jnp.allclose(jitted_particles.r, jitted_r)
@@ -294,42 +284,27 @@ def test_step_rk4_jit_matches_eager_output():
     assert jnp.allclose(jitted_result.uphi, eager_result.uphi)
 
 
-def test_particle_derivatives_pull_rescaled_forces_back_to_solver_coordinates(
-    monkeypatch,
-):
-    X_r = 2.0
-    X_t = 3.0
+def test_particle_derivatives_use_raw_particle_and_metric_coordinates(monkeypatch):
+    metric_particles = []
+    force_particles = []
 
     def fake_calculate_metric(stage_particles, r_grid, dr):
-        rescaled_particles = particle_species(
-            name=stage_particles.name,
-            charge=stage_particles.charges,
-            mass=stage_particles.masses,
-            weight=stage_particles.weight,
-            r=X_r * stage_particles.r,
-            ur=stage_particles.ur / X_r,
-            phi=stage_particles.phi,
-            uphi=stage_particles.uphi,
-            shape_mode=stage_particles.shape_mode,
-        )
-        return make_metric_rescaling_result(
-            rescaled_particles,
-            X_r * r_grid,
-            X_r=X_r,
-            X_t=X_t,
+        metric_particles.append(stage_particles)
+        return make_metric_result(r_grid)
+
+    def fake_geodesic_terms(stage_particles, U_state):
+        force_particles.append(stage_particles)
+        return (
+            jnp.full_like(stage_particles.r, 4.0),
+            jnp.full_like(stage_particles.ur, 5.0),
         )
 
-    def fake_geodesic_terms(rescaled_particles, U_state):
-        dr_dt_rescaled = jnp.full_like(rescaled_particles.r, 4.0)
-        dur_dt_rescaled = jnp.full_like(rescaled_particles.ur, 5.0)
-        return dr_dt_rescaled, dur_dt_rescaled
-
-    def fake_lorentz_terms(rescaled_particles, U_state):
-        return jnp.full_like(rescaled_particles.ur, 1.0)
+    def fake_lorentz_terms(stage_particles, U_state):
+        return jnp.full_like(stage_particles.ur, 1.0)
 
     monkeypatch.setattr(
         constraint_evolve,
-        "calculate_metric_with_particle_rescaling",
+        "calculate_metric",
         fake_calculate_metric,
     )
     monkeypatch.setattr(
@@ -364,13 +339,15 @@ def test_particle_derivatives_pull_rescaled_forces_back_to_solver_coordinates(
         r_grid[1] - r_grid[0],
     )
 
-    expected_dr_dt = (X_t / X_r) * 4.0
-    expected_dphi_dt = X_t * particles.uphi / (X_r * particles.r)
-    expected_dur_dt = X_r * X_t * (5.0 + 1.0)
+    expected_dr_dt = 4.0
+    expected_dphi_dt = particles.uphi / particles.r
+    expected_dur_dt = 6.0
 
     assert jnp.allclose(dr_dt, expected_dr_dt)
     assert jnp.allclose(dphi_dt, expected_dphi_dt)
     assert jnp.allclose(dur_dt, expected_dur_dt)
+    assert metric_particles == [particles]
+    assert force_particles == [particles]
     assert jnp.allclose(particles.r, original_r)
     assert jnp.allclose(particles.ur, original_ur)
 
@@ -556,7 +533,7 @@ def test_step_updates_current_particle_class_in_place_and_preserves_uphi():
 
 def test_step_freezes_particle_that_crosses_center(monkeypatch):
     def fake_calculate_metric(stage_particles, r_grid, dr):
-        return make_metric_rescaling_result(stage_particles, r_grid)
+        return make_metric_result(r_grid)
 
     def fake_geodesic_terms(stage_particles, U_state):
         return -jnp.ones_like(stage_particles.r), jnp.zeros_like(stage_particles.ur)
@@ -566,7 +543,7 @@ def test_step_freezes_particle_that_crosses_center(monkeypatch):
 
     monkeypatch.setattr(
         constraint_evolve,
-        "calculate_metric_with_particle_rescaling",
+        "calculate_metric",
         fake_calculate_metric,
     )
     monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
@@ -602,7 +579,7 @@ def test_step_rk4_updates_current_particle_class_in_place_and_preserves_uphi(mon
 
     def fake_calculate_metric(stage_particles, r_grid, dr):
         calls.append(stage_particles.r.copy())
-        return make_metric_rescaling_result(stage_particles, r_grid)
+        return make_metric_result(r_grid)
 
     def fake_geodesic_terms(stage_particles, U_state):
         return jnp.ones_like(stage_particles.r), jnp.full_like(stage_particles.ur, 0.5)
@@ -612,7 +589,7 @@ def test_step_rk4_updates_current_particle_class_in_place_and_preserves_uphi(mon
 
     monkeypatch.setattr(
         constraint_evolve,
-        "calculate_metric_with_particle_rescaling",
+        "calculate_metric",
         fake_calculate_metric,
     )
     monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
@@ -642,7 +619,7 @@ def test_step_rk4_recomputes_stage_specific_metric_and_em_field(monkeypatch):
         stage_number = len(metric_stage_positions) + 1
         metric_stage_positions.append(stage_particles.r.copy())
         Er = jnp.full_like(r_grid, float(stage_number))
-        return make_metric_rescaling_result(stage_particles, r_grid, Er=Er)
+        return make_metric_result(r_grid, Er=Er)
 
     def fake_geodesic_terms(stage_particles, U_state):
         geodesic_Er_values.append(U_state[5][0])
@@ -655,7 +632,7 @@ def test_step_rk4_recomputes_stage_specific_metric_and_em_field(monkeypatch):
 
     monkeypatch.setattr(
         constraint_evolve,
-        "calculate_metric_with_particle_rescaling",
+        "calculate_metric",
         fake_calculate_metric,
     )
     monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
@@ -682,7 +659,7 @@ def test_step_rk4_freezes_center_crossing_before_stage_metric_solves(monkeypatch
 
     def fake_calculate_metric(stage_particles, r_grid, dr):
         metric_stage_positions.append(stage_particles.r.copy())
-        return make_metric_rescaling_result(stage_particles, r_grid)
+        return make_metric_result(r_grid)
 
     def fake_geodesic_terms(stage_particles, U_state):
         return -jnp.ones_like(stage_particles.r), jnp.zeros_like(stage_particles.ur)
@@ -692,7 +669,7 @@ def test_step_rk4_freezes_center_crossing_before_stage_metric_solves(monkeypatch
 
     monkeypatch.setattr(
         constraint_evolve,
-        "calculate_metric_with_particle_rescaling",
+        "calculate_metric",
         fake_calculate_metric,
     )
     monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
@@ -725,7 +702,7 @@ def test_step_rk4_keeps_center_frozen_against_force_terms(monkeypatch):
 
     def fake_calculate_metric(stage_particles, r_grid, dr):
         metric_stage_positions.append(stage_particles.r.copy())
-        return make_metric_rescaling_result(stage_particles, r_grid)
+        return make_metric_result(r_grid)
 
     def fake_geodesic_terms(stage_particles, U_state):
         return jnp.ones_like(stage_particles.r), jnp.ones_like(stage_particles.ur)
@@ -735,7 +712,7 @@ def test_step_rk4_keeps_center_frozen_against_force_terms(monkeypatch):
 
     monkeypatch.setattr(
         constraint_evolve,
-        "calculate_metric_with_particle_rescaling",
+        "calculate_metric",
         fake_calculate_metric,
     )
     monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)
@@ -767,7 +744,7 @@ def test_step_rk4_uses_classic_weighted_derivative_combination(monkeypatch):
     derivative_calls = []
 
     def fake_calculate_metric(stage_particles, r_grid, dr):
-        return make_metric_rescaling_result(stage_particles, r_grid)
+        return make_metric_result(r_grid)
 
     def fake_geodesic_terms(stage_particles, U_state):
         derivative_calls.append(
@@ -786,7 +763,7 @@ def test_step_rk4_uses_classic_weighted_derivative_combination(monkeypatch):
 
     monkeypatch.setattr(
         constraint_evolve,
-        "calculate_metric_with_particle_rescaling",
+        "calculate_metric",
         fake_calculate_metric,
     )
     monkeypatch.setattr(constraint_evolve, "compute_geodesic_terms", fake_geodesic_terms)

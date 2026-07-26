@@ -50,18 +50,39 @@ def vacuum_rescale_factors(A_outer, alpha_outer, r_outer, mass, charge):
     return X_r, X_t
 
 
-def rescale_metric_to_vacuum_boundary(U_state, particles):
-    A, phi, alpha, Krr, beta_over_r, Er, source_terms, r_grid = U_state
-    mass_density, charge_density, Srr, Sr = source_terms
+def vacuum_rescale_factors_from_state(
+    U_state,
+    exterior_mass,
+    exterior_charge=0.0,
+):
+    """Return the spatial and lapse factors for a diagnostic vacuum chart."""
 
-    mass = total_particle_mass(particles)
-    charge = total_particle_charge(particles)
-    X_r, X_t = vacuum_rescale_factors(
+    A, phi, alpha, Krr, beta_over_r, Er, source_terms, r_grid = U_state
+
+    return vacuum_rescale_factors(
         A[-1],
         alpha[-1],
         r_grid[-1],
-        mass,
-        charge,
+        exterior_mass,
+        exterior_charge,
+    )
+
+
+def rescale_to_vacuum_coordinates(
+    U_state,
+    particles,
+    exterior_mass,
+    exterior_charge=0.0,
+):
+    """Map one solver-chart snapshot to the outer static vacuum chart."""
+
+    A, phi, alpha, Krr, beta_over_r, Er, source_terms, r_grid = U_state
+    mass_density, charge_density, Srr, Sr = source_terms
+
+    X_r, X_t = vacuum_rescale_factors_from_state(
+        U_state,
+        exterior_mass,
+        exterior_charge,
     )
     X_r_for_denominators = pad_value(X_r)
     X_t_for_denominators = pad_value(X_t)
@@ -69,10 +90,9 @@ def rescale_metric_to_vacuum_boundary(U_state, particles):
     A = A / X_r_for_denominators
     phi = phi / X_r_for_denominators ** (3.0 / 2.0)
     alpha = alpha / X_t_for_denominators
-    Krr = Krr * X_r**2 / X_t_for_denominators
     beta_over_r = beta_over_r / X_t_for_denominators
     Er = X_r * Er
-    r_grid = X_r * r_grid
+    rescaled_grid = X_r * r_grid
 
     Srr = Srr / X_r_for_denominators**2
     Sr = Sr / X_r_for_denominators
@@ -90,7 +110,7 @@ def rescale_metric_to_vacuum_boundary(U_state, particles):
         shape_mode=particles.shape_mode,
     )
 
-    return (
+    rescaled_U_state = (
         A,
         phi,
         alpha,
@@ -98,5 +118,28 @@ def rescale_metric_to_vacuum_boundary(U_state, particles):
         beta_over_r,
         Er,
         source_terms,
-        r_grid,
-    ), rescaled_particles, X_r, X_t
+        rescaled_grid,
+    )
+
+    return rescaled_U_state, rescaled_particles, rescaled_grid
+
+
+def schwarzschild_rescale_factors(U_state, exterior_mass):
+    """Diagnostic rescaling factors for an uncharged Schwarzschild exterior."""
+
+    return vacuum_rescale_factors_from_state(
+        U_state,
+        exterior_mass,
+        exterior_charge=0.0,
+    )
+
+
+def rescale_to_schwarzschild_coordinates(U_state, particles, exterior_mass):
+    """Return a snapshot in vacuum-normalized isotropic Schwarzschild coordinates."""
+
+    return rescale_to_vacuum_coordinates(
+        U_state,
+        particles,
+        exterior_mass,
+        exterior_charge=0.0,
+    )
