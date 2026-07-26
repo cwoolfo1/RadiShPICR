@@ -174,7 +174,7 @@ def heuns_method(U_state, dr, particles):
     )
 
 
-def calculate_metric(particles, r_grid, dr):
+def calculate_metric_with_particle_rescaling(particles, r_grid, dr):
     r_grid = jnp.asarray(r_grid)
     dr = jnp.asarray(dr, dtype=r_grid.dtype)
 
@@ -292,3 +292,13 @@ def calculate_metric(particles, r_grid, dr):
     )
 
     return rescale_metric_to_vacuum_boundary(U_state, particles)
+
+
+def calculate_metric(particles, r_grid, dr):
+    U_state, _, _, _ = calculate_metric_with_particle_rescaling(
+        particles,
+        r_grid,
+        dr,
+    )
+
+    return U_state

@@ -74,9 +74,21 @@ def rescale_metric_to_vacuum_boundary(U_state, particles):
     Er = X_r * Er
     r_grid = X_r * r_grid
 
-    Srr = Srr * (X_r / X_t_for_denominators) ** 2
-    Sr = Sr * X_r / X_t_for_denominators
+    Srr = Srr / X_r_for_denominators**2
+    Sr = Sr / X_r_for_denominators
     source_terms = (mass_density, charge_density, Srr, Sr)
+
+    rescaled_particles = type(particles)(
+        name=particles.name,
+        charge=particles.charges,
+        mass=particles.masses,
+        weight=particles.weight,
+        r=X_r * particles.r,
+        ur=particles.ur / X_r_for_denominators,
+        phi=particles.phi,
+        uphi=particles.uphi,
+        shape_mode=particles.shape_mode,
+    )
 
     return (
         A,
@@ -87,4 +99,4 @@ def rescale_metric_to_vacuum_boundary(U_state, particles):
         Er,
         source_terms,
         r_grid,
-    )
+    ), rescaled_particles, X_r, X_t

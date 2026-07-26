@@ -2,8 +2,10 @@ import jax.numpy as jnp
 
 from RadiShPICR.ConstraintBasedRelativity.geodesic import compute_geodesic_terms
 from RadiShPICR.ConstraintBasedRelativity.lorentz_force import compute_lorentz_terms
-from RadiShPICR.ConstraintBasedRelativity.solve_metric import calculate_metric
-from RadiShPICR.ConstraintBasedRelativity.utils import safe_radius
+from RadiShPICR.ConstraintBasedRelativity.solve_metric import (
+    calculate_metric_with_particle_rescaling,
+)
+from RadiShPICR.ConstraintBasedRelativity.utils import pad_value, safe_radius
 
 
 def _freeze_center_particles(particles):
@@ -20,11 +22,7 @@ def _freeze_center_particles(particles):
 
 def step(particles, r_grid, dr, dt):
     particles = _freeze_center_particles(particles)
-    U_state = calculate_metric(particles, r_grid, dr)
-
-    dr_dt, dur_dt_GR = compute_geodesic_terms(particles, U_state)
-    dur_dt_EM = compute_lorentz_terms(particles, U_state)
-    dur_dt = dur_dt_GR + dur_dt_EM
+    dr_dt, dphi_dt, dur_dt = _particle_derivatives(particles, r_grid, dr)
 
     r, phi = particles.get_positions()
     ur, uphi = particles.get_velocities()
@@ -35,7 +33,7 @@ def step(particles, r_grid, dr, dt):
 
     particles.r = r + dr_dt * dt
     particles.ur = ur + dur_dt * dt
-    particles.phi = phi + uphi * dt / safe_radius(r, 0.5 * dr)
+    particles.phi = phi + dphi_dt * dt
     particles.uphi = uphi
 
     particles = _freeze_center_particles(particles)
@@ -61,18 +59,42 @@ def _copy_particle_state(particles, r, phi, ur):
 
 def _particle_derivatives(particles, r_grid, dr):
     particles = _freeze_center_particles(particles)
-    U_state = calculate_metric(particles, r_grid, dr)
-    dr_dt, dur_dt_GR = compute_geodesic_terms(particles, U_state)
-    dur_dt_EM = compute_lorentz_terms(particles, U_state)
+    (
+        U_state,
+        rescaled_particles,
+        X_r,
+        X_t,
+    ) = calculate_metric_with_particle_rescaling(particles, r_grid, dr)
 
-    r, phi = particles.get_positions()
-    _, uphi = particles.get_velocities()
-    dphi_dt = uphi / safe_radius(r, 0.5 * dr)
+    dr_dt_rescaled, dur_dt_GR_rescaled = compute_geodesic_terms(
+        rescaled_particles,
+        U_state,
+    )
+    dur_dt_EM_rescaled = compute_lorentz_terms(rescaled_particles, U_state)
+
+    r, _ = particles.get_positions()
+    rescaled_r, _ = rescaled_particles.get_positions()
+    _, rescaled_uphi = rescaled_particles.get_velocities()
+    rescaled_grid = U_state[-1]
+    rescaled_dr = rescaled_grid[1] - rescaled_grid[0]
+
+    dphi_dt_rescaled = rescaled_uphi / safe_radius(
+        rescaled_r,
+        0.5 * rescaled_dr,
+    )
+
+    # Forces are evaluated in (r*, t*) and pulled back to the solver (r, t)
+    # chart before Euler or RK4 combines the stage derivatives.
+    X_r_for_denominators = pad_value(X_r)
+    dr_dt = X_t * dr_dt_rescaled / X_r_for_denominators
+    dphi_dt = X_t * dphi_dt_rescaled
+    dur_dt = X_r * X_t * (dur_dt_GR_rescaled + dur_dt_EM_rescaled)
+
     center_particles = r <= 0.0
 
     dr_dt = jnp.where(center_particles, 0.0, dr_dt)
     dphi_dt = jnp.where(center_particles, 0.0, dphi_dt)
-    dur_dt = jnp.where(center_particles, 0.0, dur_dt_GR + dur_dt_EM)
+    dur_dt = jnp.where(center_particles, 0.0, dur_dt)
 
     return dr_dt, dphi_dt, dur_dt
 
