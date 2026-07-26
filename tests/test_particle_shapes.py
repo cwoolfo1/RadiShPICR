@@ -49,66 +49,96 @@ def test_quadratic_shape_has_expected_tsc_weights():
         assert jnp.allclose(jnp.sum(weights), 1.0)
 
 
-def test_quadratic_pointwise_weights_match_indexed_stencil():
+def test_grid_aware_pointwise_weights_match_indexed_stencil():
     grid = make_grid()
-    radial_positions = jnp.asarray([3.0, 3.25, 3.5, 5.75])
-
-    indices, stencil_weights = radial_shape_stencil(
-        radial_positions,
-        grid,
-        shape_mode="quadratic",
-    )
-    particle_columns = jnp.broadcast_to(
-        jnp.arange(radial_positions.shape[0])[jnp.newaxis, :],
-        indices.shape,
-    )
-    indexed_weights = jnp.zeros(
-        (grid.r_full.shape[0], radial_positions.shape[0])
-    )
-    indexed_weights = indexed_weights.at[indices, particle_columns].add(
-        stencil_weights
+    boundary_indices = jnp.asarray([0, grid.r_full.shape[0] - 1])
+    radial_positions = jnp.asarray(
+        [-0.75, 0.0, 0.25, 0.5, 0.75, 3.25, 7.25, 7.5, 7.75, 8.0, 8.75]
     )
 
-    pointwise_weights = shape_weights_at_point(
-        radial_positions[jnp.newaxis, :],
-        grid.r_full[:, jnp.newaxis],
-        grid.dr,
-        shape_mode="quadratic",
-    )
+    for shape_mode in ("nearest", "quadratic"):
+        indices, stencil_weights = radial_shape_stencil(
+            radial_positions,
+            grid,
+            shape_mode=shape_mode,
+        )
+        particle_columns = jnp.broadcast_to(
+            jnp.arange(radial_positions.shape[0])[jnp.newaxis, :],
+            indices.shape,
+        )
+        indexed_weights = jnp.zeros(
+            (grid.r_full.shape[0], radial_positions.shape[0])
+        )
+        indexed_weights = indexed_weights.at[indices, particle_columns].add(
+            stencil_weights
+        )
 
-    assert jnp.allclose(pointwise_weights, indexed_weights)
-    assert jnp.allclose(jnp.sum(pointwise_weights, axis=0), 1.0)
+        pointwise_weights = jax.vmap(
+            lambda radial_coordinate: shape_weights_at_point(
+                radial_positions,
+                radial_coordinate,
+                grid.dr,
+                shape_mode=shape_mode,
+                grid=grid,
+            )
+        )(grid.r_full)
+
+        assert jnp.allclose(pointwise_weights, indexed_weights)
+        assert jnp.allclose(pointwise_weights[boundary_indices], 0.0)
+        assert jnp.allclose(jnp.sum(pointwise_weights, axis=0), 1.0)
 
 
-def test_quadratic_source_deposition_conserves_particle_mass_and_charge():
+def test_boundary_source_deposition_conserves_particle_mass_and_charge():
     grid = make_grid()
-    particles = particle_species(
-        name="test",
-        charge=3.0,
-        mass=2.0,
-        weight=0.25,
-        r=jnp.asarray([4.25]),
-        ur=jnp.asarray([0.0]),
-        phi=jnp.asarray([0.0]),
-        uphi=jnp.asarray([0.0]),
-        shape_mode="quadratic",
-    )
-
-    mass_density = jax.vmap(
-        lambda r: mass_density_at_point(particles, jnp.asarray(1.0), r, grid.dr)
-    )(grid.r_full)
-    charge_density = jax.vmap(
-        lambda r: charge_density_at_point(particles, jnp.asarray(1.0), r, grid.dr)
-    )(grid.r_full)
-
+    boundary_indices = jnp.asarray([0, grid.r_full.shape[0] - 1])
     cell_volume = jax.vmap(
         lambda r: radial_shell_volume(jnp.asarray(1.0), r, grid.dr)
     )(grid.r_full)
-    deposited_mass = jnp.sum(mass_density * cell_volume)
-    deposited_charge = jnp.sum(charge_density * cell_volume)
 
-    assert jnp.allclose(deposited_mass, particles.get_mass())
-    assert jnp.allclose(deposited_charge, particles.get_charge())
+    for shape_mode in ("nearest", "quadratic"):
+        particles = particle_species(
+            name="test",
+            charge=3.0,
+            mass=2.0,
+            weight=0.25,
+            r=jnp.asarray([0.25, 7.75]),
+            ur=jnp.asarray([0.0, 0.0]),
+            phi=jnp.asarray([0.0, 0.0]),
+            uphi=jnp.asarray([0.0, 0.0]),
+            shape_mode=shape_mode,
+        )
+
+        mass_density = jax.vmap(
+            lambda r: mass_density_at_point(
+                particles,
+                jnp.asarray(1.0),
+                r,
+                grid,
+            )
+        )(grid.r_full)
+        charge_density = jax.vmap(
+            lambda r: charge_density_at_point(
+                particles,
+                jnp.asarray(1.0),
+                r,
+                grid,
+            )
+        )(grid.r_full)
+
+        deposited_mass = jnp.sum(mass_density * cell_volume)
+        deposited_charge = jnp.sum(charge_density * cell_volume)
+        particle_count = particles.r.shape[0]
+
+        assert jnp.allclose(mass_density[boundary_indices], 0.0)
+        assert jnp.allclose(charge_density[boundary_indices], 0.0)
+        assert jnp.allclose(
+            deposited_mass,
+            particle_count * particles.get_mass(),
+        )
+        assert jnp.allclose(
+            deposited_charge,
+            particle_count * particles.get_charge(),
+        )
 
 
 def test_quadratic_shape_jit_matches_eager_and_preserves_boundary_stencil():
@@ -121,6 +151,7 @@ def test_quadratic_shape_jit_matches_eager_and_preserves_boundary_stencil():
         radial_coordinate,
         grid.dr,
         shape_mode="quadratic",
+        grid=grid,
     )
     jitted_shape_weights = jax.jit(
         shape_weights_at_point,
@@ -131,6 +162,7 @@ def test_quadratic_shape_jit_matches_eager_and_preserves_boundary_stencil():
         radial_coordinate,
         grid.dr,
         shape_mode="quadratic",
+        grid=grid,
     )
     indices, stencil_weights = radial_shape_stencil(
         radial_positions,

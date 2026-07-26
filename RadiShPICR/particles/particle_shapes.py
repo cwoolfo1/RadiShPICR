@@ -95,7 +95,36 @@ def interpolate_field_to_particles(field, radial_positions, grid, shape_mode="ne
     return jnp.sum(field[indices] * weights, axis=0)
 
 
-def shape_weights_at_point(radial_positions, radial_coordinate, dr, shape_mode="nearest"):
+def shape_weights_at_point(
+    radial_positions,
+    radial_coordinate,
+    dr,
+    shape_mode="nearest",
+    grid=None,
+):
+    """Evaluate particle weights at one radial coordinate.
+
+    When ``grid`` is supplied, the weights use the same clipped and normalized
+    interior stencil as deposition and interpolation. The no-grid path retains
+    the unbounded pointwise evaluation used by the current Z4C matter terms.
+    """
+
+    if grid is not None:
+        indices, stencil_weights = radial_shape_stencil(
+            radial_positions,
+            grid,
+            shape_mode=shape_mode,
+        )
+        floating_index = (radial_coordinate - grid.r_full[0]) / grid.dr
+        grid_index = jnp.rint(floating_index).astype(indices.dtype)
+
+        weights_at_point = jnp.where(
+            indices == grid_index,
+            stencil_weights,
+            0.0,
+        )
+        return jnp.sum(weights_at_point, axis=0)
+
     if shape_mode == "nearest":
         return jnp.where(jnp.abs(radial_positions - radial_coordinate) < 0.5 * dr, 1.0, 0.0)
 

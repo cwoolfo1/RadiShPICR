@@ -2,6 +2,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_at_point
+from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
 from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
@@ -19,7 +20,9 @@ def dr_A(U_state):
 def dr_sqrt_phi(U_state, dr=None):
     A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = U_state
     rho, charge_density, Srr, Sr = source_terms
-    mass_energy_density = rho + 0.5 * Er**2
+    A_for_denominators = pad_value(A)
+    # Er is the covariant radial field, so E_i E^i = Er^2 / A^2.
+    mass_energy_density = rho + 0.5 * Er**2 / A_for_denominators**2
 
     if dr is None:
         safe_r = jnp.where(r == 0.0, 1.0, r)
@@ -38,8 +41,10 @@ def dr_alpha(U_state, dr=None):
     A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = U_state
     rho, charge_density, Srr, Sr = source_terms
     A_for_denominators = pad_value(A)
+    # A radial electric field contributes tension along the field direction.
+    total_Srr = Srr - 0.5 * Er**2
 
-    first_term = 4.0 * jnp.pi * alpha * Srr * r * A
+    first_term = 4.0 * jnp.pi * alpha * total_Srr * r * A
     second_term = -2.0 * alpha * phi * jnp.sqrt(A)
     third_term = -2.0 * alpha * phi**2 * r
     denominator = A_for_denominators * (
@@ -89,25 +94,35 @@ def dr_Er(U_state, dr=None):
 
     safe_r = jnp.where(r == 0.0, 1.0, r) if dr is None else _safe_radius(r, dr)
     interior_term = (
-        charge_density
+        A**2 * charge_density
         - 2.0 * Er / safe_r
         - 2.0 * phi * Er / jnp.sqrt(A_for_denominators)
     )
-    center_term = charge_density / 3.0
+    center_term = A**2 * charge_density / 3.0
 
     return jnp.where(r == 0.0, center_term, interior_term)
 
 
-def _source_terms_at_point(particles, A_at_point, radial_coordinate, dr):
-    mass_density = mass_density_at_point(particles, A_at_point, radial_coordinate, dr)
-    charge_density = charge_density_at_point(particles, A_at_point, radial_coordinate, dr)
-    Srr = Srr_at_point(particles, A_at_point, radial_coordinate, dr)
-    Sr = Sr_at_point(particles, A_at_point, radial_coordinate, dr)
+def _source_terms_at_point(particles, A_at_point, radial_coordinate, grid):
+    mass_density = mass_density_at_point(
+        particles,
+        A_at_point,
+        radial_coordinate,
+        grid,
+    )
+    charge_density = charge_density_at_point(
+        particles,
+        A_at_point,
+        radial_coordinate,
+        grid,
+    )
+    Srr = Srr_at_point(particles, A_at_point, radial_coordinate, grid)
+    Sr = Sr_at_point(particles, A_at_point, radial_coordinate, grid)
 
     return mass_density, charge_density, Srr, Sr
 
 
-def heuns_method(U_state, dr, particles):
+def heuns_method(U_state, dr, particles, grid):
     A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = U_state
 
     dA_dr = dr_A(U_state)
@@ -121,7 +136,7 @@ def heuns_method(U_state, dr, particles):
     alpha_predictor = alpha + dalpha_dr * dr
     Er_predictor = Er + dE_dr * dr
     source_terms_predictor = _source_terms_at_point(
-        particles, A_predictor, r_predictor, dr
+        particles, A_predictor, r_predictor, grid
     )
     Krr_predictor = Krr_from_state(
         (A_predictor, phi_predictor, alpha_predictor, Krr, beta_over_r, Er_predictor, source_terms_predictor, r_predictor)
@@ -148,7 +163,7 @@ def heuns_method(U_state, dr, particles):
     alpha_corrected = alpha + 0.5 * (dalpha_dr + dalpha_dr_predictor) * dr
     Er_corrected = Er + 0.5 * (dE_dr + dE_dr_predictor) * dr
     source_terms_corrected = _source_terms_at_point(
-        particles, A_corrected, r_predictor, dr
+        particles, A_corrected, r_predictor, grid
     )
     Krr_corrected = Krr_from_state(
         (
@@ -178,6 +193,14 @@ def heuns_method(U_state, dr, particles):
 def calculate_metric(particles, r_grid, dr):
     r_grid = jnp.asarray(r_grid)
     dr = jnp.asarray(dr, dtype=r_grid.dtype)
+    grid = RadialGrid(
+        r_full=r_grid,
+        r_interior=r_grid[1:-1],
+        # The physical endpoint nodes remain reserved for vacuum boundary data.
+        dr=dr,
+        epsilon=0.5 * dr,
+        r_max=r_grid[-1],
+    )
 
     initial_A = jnp.asarray(1.0, dtype=r_grid.dtype)
     initial_phi = jnp.asarray(0.0, dtype=r_grid.dtype)
@@ -186,7 +209,12 @@ def calculate_metric(particles, r_grid, dr):
     initial_beta_over_r = jnp.asarray(0.0, dtype=r_grid.dtype)
     initial_Er = jnp.asarray(0.0, dtype=r_grid.dtype)
     initial_r = r_grid[0]
-    initial_source_terms = _source_terms_at_point(particles, initial_A, initial_r, dr)
+    initial_source_terms = _source_terms_at_point(
+        particles,
+        initial_A,
+        initial_r,
+        grid,
+    )
 
     state = (
         initial_A,
@@ -200,7 +228,7 @@ def calculate_metric(particles, r_grid, dr):
     )
 
     def radial_step(state, local_dr):
-        state = heuns_method(state, local_dr, particles)
+        state = heuns_method(state, local_dr, particles, grid)
         A, phi, alpha, Krr, beta_over_r, Er, source_terms, r = state
         mass_density, charge_density, Srr, Sr = source_terms
 

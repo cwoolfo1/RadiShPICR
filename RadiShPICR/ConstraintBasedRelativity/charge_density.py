@@ -3,12 +3,25 @@ from RadiShPICR.particles.particle_shapes import shape_weights_at_point
 from RadiShPICR.ConstraintBasedRelativity.utils import pad_value, radial_shell_volume
 
 
-def charge_density_at_point(particles, A_at_point, radial_coordinate, dr, shape_mode=None):
+def charge_density_at_point(
+    particles,
+    A_at_point,
+    radial_coordinate,
+    grid,
+    shape_mode=None,
+):
     r_particle, _ = particles.get_positions()
     ur, uphi = particles.get_velocities()
     particle_shape = particles.get_shape() if shape_mode is None else shape_mode
+    dr = grid.dr
 
-    weights = shape_weights_at_point(r_particle, radial_coordinate, dr, particle_shape)
+    weights = shape_weights_at_point(
+        r_particle,
+        radial_coordinate,
+        dr,
+        particle_shape,
+        grid=grid,
+    )
     safe_r = jnp.maximum(jnp.asarray(radial_coordinate, dtype=r_particle.dtype), 0.5 * dr)
     A_for_denominators = pad_value(A_at_point)
     lorentz_factors = jnp.sqrt(

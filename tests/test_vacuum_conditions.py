@@ -1,6 +1,13 @@
+import jax
 import jax.numpy as jnp
 
 from RadiShPICR.particles import particle_species
+from RadiShPICR.ConstraintBasedRelativity.solve_metric import (
+    dr_A,
+    dr_alpha,
+    dr_Er,
+    dr_sqrt_phi,
+)
 from RadiShPICR.ConstraintBasedRelativity.vacuum_conditions import (
     reissner_nordstrom_A,
     reissner_nordstrom_lapse,
@@ -26,15 +33,18 @@ def make_species(charge=1.5, mass=2.0, weight=0.5):
     )
 
 
-def test_reissner_nordstrom_helpers_match_notebook_charge_convention():
+def test_reissner_nordstrom_helpers_match_rationalized_charge_convention():
     r = jnp.asarray(4.0)
     mass = jnp.asarray(1.5)
     charge = jnp.asarray(2.0)
 
-    rQ = charge**2 / (4.0 * jnp.pi)
-    expected_A = (1.0 + mass / (2.0 * r))**2 - rQ**2 / (4.0 * r**2)
+    charge_radius_squared = charge**2 / (4.0 * jnp.pi)
+    expected_A = (
+        (1.0 + mass / (2.0 * r))**2
+        - charge_radius_squared / (4.0 * r**2)
+    )
     expected_lapse = (1.0 - mass / (2.0 * r)) * (1.0 + mass / (2.0 * r))
-    expected_lapse = expected_lapse + rQ**2 / (4.0 * r**2)
+    expected_lapse = expected_lapse + charge_radius_squared / (4.0 * r**2)
     expected_lapse = expected_lapse / expected_A
 
     assert jnp.allclose(reissner_nordstrom_A(r, mass, charge), expected_A)
@@ -42,6 +52,54 @@ def test_reissner_nordstrom_helpers_match_notebook_charge_convention():
         reissner_nordstrom_lapse(r, mass, charge),
         expected_lapse,
     )
+
+
+def test_reissner_nordstrom_fields_satisfy_electrovac_radial_equations():
+    mass = jnp.asarray(1.0)
+    charge = jnp.asarray(0.8)
+    radii = jnp.asarray([2.0, 3.0, 5.0, 8.0])
+    zeros = jnp.asarray(0.0)
+    vacuum_sources = (zeros, zeros, zeros, zeros)
+
+    def exact_A(r):
+        return reissner_nordstrom_A(r, mass, charge)
+
+    def exact_alpha(r):
+        return reissner_nordstrom_lapse(r, mass, charge)
+
+    def exact_Er(r):
+        return charge / (4.0 * jnp.pi * exact_A(r) * r**2)
+
+    def equation_residuals(r):
+        A = exact_A(r)
+        phi = jax.grad(lambda x: jnp.sqrt(exact_A(x)))(r)
+        alpha = exact_alpha(r)
+        Er = exact_Er(r)
+        U_state = (
+            A,
+            phi,
+            alpha,
+            zeros,
+            zeros,
+            Er,
+            vacuum_sources,
+            r,
+        )
+
+        return jnp.asarray(
+            [
+                dr_A(U_state) - jax.grad(exact_A)(r),
+                dr_sqrt_phi(U_state) - jax.grad(
+                    lambda x: jax.grad(lambda y: jnp.sqrt(exact_A(y)))(x)
+                )(r),
+                dr_alpha(U_state) - jax.grad(exact_alpha)(r),
+                dr_Er(U_state) - jax.grad(exact_Er)(r),
+            ]
+        )
+
+    residuals = jax.vmap(equation_residuals)(radii)
+
+    assert jnp.allclose(residuals, 0.0, rtol=2.0e-4, atol=2.0e-6)
 
 
 def test_reissner_nordstrom_helpers_reduce_to_schwarzschild_without_charge():
@@ -57,6 +115,37 @@ def test_reissner_nordstrom_helpers_reduce_to_schwarzschild_without_charge():
         reissner_nordstrom_lapse(r, mass, charge),
         expected_lapse,
     )
+
+
+def test_charged_vacuum_rescale_recovers_known_coordinate_factors():
+    mass = jnp.asarray(1.2)
+    charge = jnp.asarray(0.7)
+    r_outer = jnp.asarray(5.0)
+    expected_X_r = jnp.asarray(1.3)
+    expected_X_t = jnp.asarray(0.8)
+    rescaled_outer_radius = expected_X_r * r_outer
+
+    A_outer = expected_X_r * reissner_nordstrom_A(
+        rescaled_outer_radius,
+        mass,
+        charge,
+    )
+    alpha_outer = expected_X_t * reissner_nordstrom_lapse(
+        rescaled_outer_radius,
+        mass,
+        charge,
+    )
+
+    X_r, X_t = vacuum_rescale_factors(
+        A_outer,
+        alpha_outer,
+        r_outer,
+        mass,
+        charge,
+    )
+
+    assert jnp.allclose(X_r, expected_X_r)
+    assert jnp.allclose(X_t, expected_X_t)
 
 
 def test_total_particle_mass_and_charge_sum_getter_values_over_particles():
@@ -126,7 +215,7 @@ def test_schwarzschild_rescale_matches_outer_boundary_cell():
     assert jnp.allclose(phi_matched, phi / expected_X_r ** (3.0 / 2.0))
     assert jnp.allclose(Krr_matched, Krr)
     assert jnp.allclose(beta_matched, beta_over_r / expected_X_t)
-    assert jnp.allclose(Er_matched, expected_X_r * Er)
+    assert jnp.allclose(Er_matched, Er / expected_X_r)
     assert jnp.allclose(Srr_matched, source_terms[2] / expected_X_r**2)
     assert jnp.allclose(Sr_matched, source_terms[3] / expected_X_r)
     assert jnp.allclose(rescaled_particles.r, expected_X_r * particles.r)

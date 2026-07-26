@@ -16,16 +16,23 @@ def total_particle_charge(particles):
 
 
 def reissner_nordstrom_A(r, mass, charge):
-    rQ = charge**2 / (4.0 * jnp.pi)
+    """Isotropic RN spatial metric coefficient for physical charge ``charge``."""
 
-    return (1.0 + mass / (2.0 * r))**2 - rQ**2 / (4.0 * r**2)
+    charge_radius_squared = charge**2 / (4.0 * jnp.pi)
+
+    return (
+        (1.0 + mass / (2.0 * r))**2
+        - charge_radius_squared / (4.0 * r**2)
+    )
 
 
 def reissner_nordstrom_lapse(r, mass, charge):
-    rQ = charge**2 / (4.0 * jnp.pi)
+    """Isotropic RN lapse for physical charge ``charge``."""
+
+    charge_radius_squared = charge**2 / (4.0 * jnp.pi)
 
     numerator = (1.0 - mass / (2.0 * r)) * (1.0 + mass / (2.0 * r))
-    numerator = numerator + rQ**2 / (4.0 * r**2)
+    numerator = numerator + charge_radius_squared / (4.0 * r**2)
 
     return numerator / pad_value(reissner_nordstrom_A(r, mass, charge))
 
@@ -33,10 +40,12 @@ def reissner_nordstrom_lapse(r, mass, charge):
 def vacuum_rescale_factors(A_outer, alpha_outer, r_outer, mass, charge):
     """Coordinate rescaling that matches the vacuum solution at the outer cell."""
 
-    rQ = charge**2 / (4.0 * jnp.pi)
+    charge_radius_squared = charge**2 / (4.0 * jnp.pi)
 
     linear_coefficient = mass / r_outer - A_outer
-    constant_coefficient = (mass**2 - rQ**2) / (4.0 * r_outer**2)
+    constant_coefficient = (
+        mass**2 - charge_radius_squared
+    ) / (4.0 * r_outer**2)
     discriminant = linear_coefficient**2 - 4.0 * constant_coefficient
     X_r = 0.5 * (-linear_coefficient + jnp.sqrt(discriminant))
 
@@ -91,7 +100,8 @@ def rescale_to_vacuum_coordinates(
     phi = phi / X_r_for_denominators ** (3.0 / 2.0)
     alpha = alpha / X_t_for_denominators
     beta_over_r = beta_over_r / X_t_for_denominators
-    Er = X_r * Er
+    # Er is covariant, so E_r transforms with dr / dr* = 1 / X_r.
+    Er = Er / X_r_for_denominators
     rescaled_grid = X_r * r_grid
 
     Srr = Srr / X_r_for_denominators**2

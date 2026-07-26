@@ -13,6 +13,8 @@ from RadiShPICR.ConstraintBasedRelativity.geodesic import compute_geodesic_terms
 from RadiShPICR.ConstraintBasedRelativity.lorentz_force import compute_lorentz_terms
 from RadiShPICR.ConstraintBasedRelativity.solve_metric import (
     beta_over_r_from_integral,
+    dr_alpha,
+    dr_Er,
     dr_sqrt_phi,
 )
 from RadiShPICR.ConstraintBasedRelativity.utils import pad_value
@@ -169,6 +171,60 @@ def test_hamiltonian_constraint_uses_regular_center_limit():
     expected_center = -(2.0 * jnp.pi / 3.0) * A[0] ** (5.0 / 2.0) * rho[0]
 
     assert jnp.allclose(dphi_dr[0], expected_center)
+
+
+def test_electromagnetic_sources_use_covariant_radial_field():
+    A = jnp.asarray(2.0)
+    phi = jnp.asarray(0.15)
+    alpha = jnp.asarray(0.8)
+    Er = jnp.asarray(0.4)
+    rho = jnp.asarray(0.3)
+    charge_density = jnp.asarray(0.25)
+    particle_Srr = jnp.asarray(0.2)
+    r = jnp.asarray(0.75)
+    dr = jnp.asarray(0.25)
+    zeros = jnp.asarray(0.0)
+    source_terms = (rho, charge_density, particle_Srr, zeros)
+    U_state = (A, phi, alpha, zeros, zeros, Er, source_terms, r)
+
+    A_for_denominators = pad_value(A)
+    total_rho = rho + 0.5 * Er**2 / A_for_denominators**2
+    expected_dphi_dr = (
+        -2.0 * jnp.pi * jnp.sqrt(A) ** 5 * total_rho
+        - 2.0 * phi / r
+    )
+
+    total_Srr = particle_Srr - 0.5 * Er**2
+    expected_dalpha_dr = (
+        4.0 * jnp.pi * alpha * total_Srr * r * A
+        - 2.0 * alpha * phi * jnp.sqrt(A)
+        - 2.0 * alpha * phi**2 * r
+    ) / (
+        A_for_denominators
+        * (1.0 + 2.0 * r * phi / jnp.sqrt(A_for_denominators))
+    )
+
+    expected_dEr_dr = (
+        A**2 * charge_density
+        - 2.0 * Er / r
+        - 2.0 * phi * Er / jnp.sqrt(A_for_denominators)
+    )
+
+    assert jnp.allclose(dr_sqrt_phi(U_state, dr), expected_dphi_dr)
+    assert jnp.allclose(dr_alpha(U_state, dr), expected_dalpha_dr)
+    assert jnp.allclose(dr_Er(U_state, dr), expected_dEr_dr)
+
+
+def test_gauss_law_uses_regular_covariant_center_limit():
+    A = jnp.asarray(1.7)
+    charge_density = jnp.asarray(0.6)
+    zeros = jnp.asarray(0.0)
+    source_terms = (zeros, charge_density, zeros, zeros)
+    U_state = (A, zeros, jnp.asarray(1.0), zeros, zeros, zeros, source_terms, zeros)
+
+    expected_center = A**2 * charge_density / 3.0
+
+    assert jnp.allclose(dr_Er(U_state, jnp.asarray(0.25)), expected_center)
 
 
 def test_force_terms_consume_ustate_directly():
@@ -367,13 +423,14 @@ def test_source_terms_pad_zero_A_denominators():
     A_at_point = jnp.asarray(0.0)
     radial_coordinate = jnp.asarray(0.25)
     dr = jnp.asarray(0.25)
+    grid = make_interpolation_grid(jnp.asarray([0.0, 0.25, 0.50]))
 
     source_terms = jnp.asarray(
         [
-            mass_density_at_point(particles, A_at_point, radial_coordinate, dr),
-            charge_density_at_point(particles, A_at_point, radial_coordinate, dr),
-            Srr_at_point(particles, A_at_point, radial_coordinate, dr),
-            Sr_at_point(particles, A_at_point, radial_coordinate, dr),
+            mass_density_at_point(particles, A_at_point, radial_coordinate, grid),
+            charge_density_at_point(particles, A_at_point, radial_coordinate, grid),
+            Srr_at_point(particles, A_at_point, radial_coordinate, grid),
+            Sr_at_point(particles, A_at_point, radial_coordinate, grid),
         ]
     )
 
