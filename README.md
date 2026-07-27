@@ -12,3 +12,12 @@ radial metric solves and particle timestepping are imported from
 `RadiShPICR.ConstraintBasedRelativity`; Z4C metric evolution helpers are
 imported from `RadiShPICR.Z4C`.  `RadiShPICR.evolve` remains as a compatibility
 import for the constraint-based `step` and `step_rk4` routines.
+
+
+STILL UNDER DEVELOPMENT.  The code is not yet ready for production use.
+
+CHECKLIST:
+- [ ] Add more tests for the constraint-based relativity implementation.
+- [ ] Fix definition of angular position update in constraint-based relativity implementation.
+- [ ] Finish implementation of single-puncture black hole in Z4C.
+- [ ] Add EM logic for Z4C.
