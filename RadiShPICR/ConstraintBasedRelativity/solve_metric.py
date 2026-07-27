@@ -198,7 +198,6 @@ def calculate_metric(particles, r_grid, dr):
         r_interior=r_grid[1:-1],
         # The physical endpoint nodes remain reserved for vacuum boundary data.
         dr=dr,
-        epsilon=0.5 * dr,
         r_max=r_grid[-1],
     )
 

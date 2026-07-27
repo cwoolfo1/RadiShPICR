@@ -11,7 +11,6 @@ def charge_density_at_point(
     shape_mode=None,
 ):
     r_particle, _ = particles.get_positions()
-    ur, uphi = particles.get_velocities()
     particle_shape = particles.get_shape() if shape_mode is None else shape_mode
     dr = grid.dr
 
@@ -22,17 +21,12 @@ def charge_density_at_point(
         particle_shape,
         grid=grid,
     )
-    safe_r = jnp.maximum(jnp.asarray(radial_coordinate, dtype=r_particle.dtype), 0.5 * dr)
-    A_for_denominators = pad_value(A_at_point)
-    lorentz_factors = jnp.sqrt(
-        1.0
-        + ur**2 / A_for_denominators**2
-        + uphi**2 / (A_for_denominators**2 * safe_r**2)
-    )
-
+    A_for_volume = pad_value(A_at_point)
     cell_volume = radial_shell_volume(
-        A_for_denominators,
+        A_for_volume,
         radial_coordinate,
         dr,
     )
-    return jnp.sum(particles.get_charge() * weights * lorentz_factors / cell_volume)
+
+    # Each macro-particle carries fixed charge; W weights energy, not charge.
+    return jnp.sum(particles.get_charge() * weights / cell_volume)

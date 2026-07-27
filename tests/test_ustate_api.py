@@ -6,7 +6,7 @@ from RadiShPICR.ConstraintBasedRelativity.charge_density import charge_density_a
 from RadiShPICR.ConstraintBasedRelativity.mass_density import mass_density_at_point
 from RadiShPICR.ConstraintBasedRelativity.evolve import step, step_rk4
 from RadiShPICR.particles.particle_shapes import interpolate_field_to_particles
-from RadiShPICR.ConstraintBasedRelativity import calculate_metric
+from RadiShPICR.ConstraintBasedRelativity import build_radial_grid, calculate_metric
 from RadiShPICR.ConstraintBasedRelativity.energy_momentum_tensor import Srr_at_point, Sr_at_point
 from RadiShPICR.ConstraintBasedRelativity.grid import RadialGrid
 from RadiShPICR.ConstraintBasedRelativity.geodesic import compute_geodesic_terms
@@ -41,9 +41,18 @@ def make_interpolation_grid(r_grid):
         r_full=r_grid,
         r_interior=r_grid,
         dr=dr,
-        epsilon=0.5 * dr,
         r_max=r_grid[-1],
     )
+
+
+def test_build_radial_grid_has_no_public_epsilon_parameter():
+    grid = build_radial_grid(r_max=2.0, num_interior_points=5)
+
+    assert grid._fields == ("r_full", "r_interior", "dr", "r_max")
+    assert jnp.allclose(grid.r_full, jnp.linspace(0.0, 2.0, 5))
+    assert jnp.allclose(grid.r_interior, grid.r_full)
+    assert jnp.allclose(grid.dr, 0.5)
+    assert jnp.allclose(grid.r_max, 2.0)
 
 
 def make_metric_result(r_grid, Er=None):

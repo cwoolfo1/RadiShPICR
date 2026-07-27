@@ -12,7 +12,6 @@ def _field_interpolation_grid(r_grid):
         r_full=r_grid,
         r_interior=r_grid,
         dr=dr_grid,
-        epsilon=0.5 * dr_grid,
         r_max=r_grid[-1],
     )
 

@@ -18,7 +18,6 @@ def make_grid(r_max=8.0, dr=1.0):
         r_full=r_grid,
         r_interior=r_grid,
         dr=dr,
-        epsilon=0.5 * dr,
         r_max=r_max,
     )
 
@@ -138,6 +137,65 @@ def test_boundary_source_deposition_conserves_particle_mass_and_charge():
         assert jnp.allclose(
             deposited_charge,
             particle_count * particles.get_charge(),
+        )
+
+
+def test_charge_density_is_independent_of_particle_momentum():
+    grid = make_grid()
+    A = 1.0 + 0.05 * grid.r_full
+    cell_volume = jax.vmap(radial_shell_volume, in_axes=(0, 0, None))(
+        A,
+        grid.r_full,
+        grid.dr,
+    )
+
+    for shape_mode in ("nearest", "quadratic"):
+        stationary_particles = particle_species(
+            name="stationary",
+            charge=3.0,
+            mass=2.0,
+            weight=0.25,
+            r=jnp.asarray([0.25, 3.25, 7.75]),
+            ur=jnp.zeros(3),
+            phi=jnp.zeros(3),
+            uphi=jnp.zeros(3),
+            shape_mode=shape_mode,
+        )
+        moving_particles = particle_species(
+            name="moving",
+            charge=3.0,
+            mass=2.0,
+            weight=0.25,
+            r=stationary_particles.r,
+            ur=jnp.asarray([1.2, -0.7, 0.9]),
+            phi=stationary_particles.phi,
+            uphi=jnp.asarray([0.4, 1.1, -0.5]),
+            shape_mode=shape_mode,
+        )
+
+        def deposit_charge(particles):
+            return jax.vmap(
+                lambda A_at_point, radial_coordinate: charge_density_at_point(
+                    particles,
+                    A_at_point,
+                    radial_coordinate,
+                    grid,
+                )
+            )(A, grid.r_full)
+
+        stationary_charge_density = deposit_charge(stationary_particles)
+        moving_charge_density = deposit_charge(moving_particles)
+        jitted_charge_density = jax.jit(deposit_charge)(moving_particles)
+
+        deposited_charge = jnp.sum(moving_charge_density * cell_volume)
+        expected_charge = moving_particles.r.shape[0] * moving_particles.get_charge()
+
+        assert jnp.allclose(moving_charge_density, stationary_charge_density)
+        assert jnp.allclose(jitted_charge_density, moving_charge_density)
+        assert jnp.allclose(deposited_charge, expected_charge)
+        assert jnp.allclose(
+            moving_charge_density[jnp.asarray([0, -1])],
+            0.0,
         )
 
 
