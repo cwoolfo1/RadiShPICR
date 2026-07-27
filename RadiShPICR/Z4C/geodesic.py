@@ -12,7 +12,6 @@ def _radial_grid_from_metric(metric: Z4C_Metric):
         r_full=metric.r,
         r_interior=metric.r,
         dr=metric.dr,
-        epsilon=0.5 * metric.dr,
         r_max=metric.r[-1],
     )
 
